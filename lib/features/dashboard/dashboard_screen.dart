@@ -7,6 +7,7 @@ import '../../core/widgets/device_card.dart';
 import '../../core/widgets/sensor_card.dart';
 import '../../models/smart_device.dart';
 import '../../providers/automation_provider.dart';
+import '../../providers/alert_provider.dart';
 import '../../providers/device_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/sensor_provider.dart';
@@ -15,11 +16,13 @@ import '../history/history_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
+    required this.onDevicesTap,
     required this.onAlertsTap,
     required this.onProfileTap,
     super.key,
   });
 
+  final VoidCallback onDevicesTap;
   final VoidCallback onAlertsTap;
   final VoidCallback onProfileTap;
 
@@ -29,6 +32,7 @@ class DashboardScreen extends StatelessWidget {
 
     final deviceProvider = context.watch<DeviceProvider>();
     final settingsProvider = context.watch<SettingsProvider>();
+    final alertProvider = context.watch<AlertProvider>();
 
     final sensors = sensorProvider.data;
     final devices = deviceProvider.devices;
@@ -59,6 +63,7 @@ class DashboardScreen extends StatelessWidget {
                       roomStatus: sensorProvider.roomStatus,
                       roomName: settingsProvider.roomName,
                       displayName: settingsProvider.displayName,
+                      unreadAlertCount: alertProvider.unreadCount,
                       onAlertsTap: onAlertsTap,
                       onProfileTap: onProfileTap,
                     ),
@@ -154,10 +159,7 @@ class DashboardScreen extends StatelessWidget {
                     _SectionHeader(
                       title: 'Quick controls',
                       actionText: 'All devices',
-                      onAction: () {
-                        // The Devices tab already contains
-                        // all connected and virtual devices.
-                      },
+                      onAction: onDevicesTap,
                     ),
 
                     const SizedBox(height: 15),
@@ -277,6 +279,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.roomStatus,
     required this.roomName,
     required this.displayName,
+    required this.unreadAlertCount,
     required this.onAlertsTap,
     required this.onProfileTap,
   });
@@ -284,6 +287,7 @@ class _DashboardHeader extends StatelessWidget {
   final String roomStatus;
   final String roomName;
   final String displayName;
+  final int unreadAlertCount;
   final VoidCallback onAlertsTap;
   final VoidCallback onProfileTap;
 
@@ -330,17 +334,50 @@ class _DashboardHeader extends StatelessWidget {
           ),
         ),
 
-        Container(
+        SizedBox(
           width: 49,
           height: 49,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: IconButton(
-            tooltip: 'Open alerts',
-            onPressed: onAlertsTap,
-            icon: const Icon(Icons.notifications_none_rounded),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: IconButton(
+                    tooltip: 'Open alerts',
+                    onPressed: onAlertsTap,
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                ),
+              ),
+              if (unreadAlertCount > 0)
+                Positioned(
+                  right: -4,
+                  top: -5,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 20),
+                    height: 20,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Text(
+                      unreadAlertCount > 99 ? '99+' : '$unreadAlertCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
 

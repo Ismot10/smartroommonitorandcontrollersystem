@@ -32,6 +32,60 @@
         },
         "history": {
           ".indexOn": ["createdAt"]
+        },
+        "automation": {
+          "masterEnabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "rules": {
+            "$ruleId": {
+              "enabled": {
+                ".validate": "newData.isBoolean()"
+              },
+              "triggerValue": {
+                ".validate": "newData.isNumber()"
+              },
+              "resetValue": {
+                ".validate": "newData.isNumber()"
+              },
+              "updatedAt": {
+                ".validate": "newData.isNumber()"
+              }
+            }
+          }
+        },
+        "alerts": {
+          ".indexOn": ["createdAt"],
+          "$alertId": {
+            ".validate": "newData.hasChildren(['id', 'ruleId', 'title', 'message', 'severity', 'isRead', 'isTest', 'createdAt'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val() == $alertId"
+            },
+            "ruleId": {
+              ".validate": "newData.isString()"
+            },
+            "title": {
+              ".validate": "newData.isString()"
+            },
+            "message": {
+              ".validate": "newData.isString()"
+            },
+            "severity": {
+              ".validate": "newData.val() == 'info' || newData.val() == 'warning' || newData.val() == 'critical'"
+            },
+            "isRead": {
+              ".validate": "newData.isBoolean()"
+            },
+            "isTest": {
+              ".validate": "newData.isBoolean()"
+            },
+            "createdAt": {
+              ".validate": "newData.isNumber()"
+            }
+          }
         }
       }
     }

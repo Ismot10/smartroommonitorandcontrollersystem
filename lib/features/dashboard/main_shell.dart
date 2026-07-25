@@ -20,6 +20,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final screens = <Widget>[
       DashboardScreen(
+        onDevicesTap: () {
+          setState(() => _selectedIndex = 1);
+        },
         onAlertsTap: () {
           setState(() => _selectedIndex = 3);
         },

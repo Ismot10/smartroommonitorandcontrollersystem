@@ -6,11 +6,7 @@ enum AutomationRuleType {
   gasEmergency,
 }
 
-enum AutomationSeverity {
-  info,
-  warning,
-  critical,
-}
+enum AutomationSeverity { info, warning, critical }
 
 class AutomationRule {
   const AutomationRule({
@@ -78,25 +74,27 @@ class AutomationRule {
     };
   }
 
-  factory AutomationRule.fromMap(
-      String id,
-      Map<dynamic, dynamic> map,
-      ) {
+  Map<String, dynamic> toPersistenceMap() {
+    return {
+      'enabled': enabled,
+      if (triggerValue != null) 'triggerValue': triggerValue,
+      if (resetValue != null) 'resetValue': resetValue,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+    };
+  }
+
+  factory AutomationRule.fromMap(String id, Map<dynamic, dynamic> map) {
     return AutomationRule(
       id: id,
       title: map['title']?.toString() ?? id,
       description: map['description']?.toString() ?? '',
       type: AutomationRuleType.values.firstWhere(
-            (type) => type.name == map['type'],
+        (type) => type.name == map['type'],
         orElse: () => AutomationRuleType.temperatureFan,
       ),
       enabled: map['enabled'] != false,
-      triggerValue: _toNullableDouble(
-        map['triggerValue'],
-      ),
-      resetValue: _toNullableDouble(
-        map['resetValue'],
-      ),
+      triggerValue: _toNullableDouble(map['triggerValue']),
+      resetValue: _toNullableDouble(map['resetValue']),
       unit: map['unit']?.toString() ?? '',
       actions: _toStringList(map['actions']),
     );
@@ -132,6 +130,7 @@ class AutomationEvent {
     required this.createdAt,
     required this.severity,
     required this.isTest,
+    this.isRead = false,
   });
 
   final String id;
@@ -141,6 +140,20 @@ class AutomationEvent {
   final DateTime createdAt;
   final AutomationSeverity severity;
   final bool isTest;
+  final bool isRead;
+
+  AutomationEvent copyWith({String? id, bool? isRead}) {
+    return AutomationEvent(
+      id: id ?? this.id,
+      ruleId: ruleId,
+      title: title,
+      message: message,
+      createdAt: createdAt,
+      severity: severity,
+      isTest: isTest,
+      isRead: isRead ?? this.isRead,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -151,13 +164,11 @@ class AutomationEvent {
       'createdAt': createdAt.millisecondsSinceEpoch,
       'severity': severity.name,
       'isTest': isTest,
+      'isRead': isRead,
     };
   }
 
-  factory AutomationEvent.fromMap(
-      String id,
-      Map<dynamic, dynamic> map,
-      ) {
+  factory AutomationEvent.fromMap(String id, Map<dynamic, dynamic> map) {
     return AutomationEvent(
       id: id,
       ruleId: map['ruleId']?.toString() ?? '',
@@ -165,10 +176,11 @@ class AutomationEvent {
       message: map['message']?.toString() ?? '',
       createdAt: _toDateTime(map['createdAt']),
       severity: AutomationSeverity.values.firstWhere(
-            (severity) => severity.name == map['severity'],
+        (severity) => severity.name == map['severity'],
         orElse: () => AutomationSeverity.info,
       ),
       isTest: map['isTest'] == true,
+      isRead: map['isRead'] == true,
     );
   }
 
@@ -178,9 +190,7 @@ class AutomationEvent {
     }
 
     if (value is num) {
-      return DateTime.fromMillisecondsSinceEpoch(
-        value.toInt(),
-      );
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
     }
 
     return DateTime.now();

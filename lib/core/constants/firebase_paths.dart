@@ -6,6 +6,7 @@ abstract final class FirebasePaths {
   static String get sensors => '$roomRoot/sensors';
   static String get devices => '$roomRoot/devices';
   static String get automation => '$roomRoot/automation';
+  static String get automationRules => '$automation/rules';
   static String get alerts => '$roomRoot/alerts';
   static String get history => '$roomRoot/history';
   static String get schedules => '$roomRoot/schedules';

@@ -9,10 +9,13 @@ import '../features/onboarding/onboarding_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../core/constants/app_config.dart';
 import '../providers/automation_provider.dart';
+import '../providers/alert_provider.dart';
 import '../providers/device_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/sensor_provider.dart';
 import '../services/firebase_device_repository.dart';
+import '../services/firebase_alert_repository.dart';
+import '../services/firebase_automation_repository.dart';
 import '../services/firebase_history_repository.dart';
 import '../services/firebase_sensor_repository.dart';
 import '../services/mock_history_repository.dart';
@@ -83,22 +86,50 @@ final GoRouter appRouter = GoRouter(
                     : FirebaseDeviceRepository(),
               )..start(),
             ),
+            ChangeNotifierProvider<AlertProvider>(
+              create: (_) => AlertProvider(
+                repository: AppConfig.useMockData
+                    ? null
+                    : FirebaseAlertRepository(),
+              )..start(),
+            ),
           ],
           child:
-              ChangeNotifierProxyProvider2<
+              ChangeNotifierProxyProvider3<
                 SensorProvider,
                 DeviceProvider,
+                AlertProvider,
                 AutomationProvider
               >(
-                create: (_) => AutomationProvider(),
+                create: (_) => AutomationProvider(
+                  repository: AppConfig.useMockData
+                      ? null
+                      : FirebaseAutomationRepository(
+                          defaults: AutomationProvider.defaultRules,
+                        ),
+                )..start(),
                 update:
-                    (_, sensorProvider, deviceProvider, automationProvider) {
+                    (
+                      _,
+                      sensorProvider,
+                      deviceProvider,
+                      alertProvider,
+                      automationProvider,
+                    ) {
                       final provider =
-                          automationProvider ?? AutomationProvider();
+                          automationProvider ??
+                          (AutomationProvider(
+                            repository: AppConfig.useMockData
+                                ? null
+                                : FirebaseAutomationRepository(
+                                    defaults: AutomationProvider.defaultRules,
+                                  ),
+                          )..start());
 
                       provider.updateDependencies(
                         sensorProvider: sensorProvider,
                         deviceProvider: deviceProvider,
+                        alertProvider: alertProvider,
                       );
 
                       return provider;

@@ -3,19 +3,24 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/automation_rule.dart';
+import '../models/automation_settings_snapshot.dart';
 import '../models/sensor_data.dart';
 import '../models/smart_device.dart';
+import '../services/automation_repository.dart';
+import 'alert_provider.dart';
 import 'device_provider.dart';
 import 'sensor_provider.dart';
 
 class AutomationProvider extends ChangeNotifier {
-  AutomationProvider()
-      : _rules = [
+  AutomationProvider({AutomationRepository? repository})
+    : _repository = repository,
+      _rules = List.of(defaultRules);
+
+  static List<AutomationRule> get defaultRules => [
     const AutomationRule(
       id: 'temperatureFan',
       title: 'Climate comfort',
-      description:
-      'Turn on the virtual fan when the room becomes hot.',
+      description: 'Turn on the virtual fan when the room becomes hot.',
       type: AutomationRuleType.temperatureFan,
       enabled: true,
       triggerValue: 30,
@@ -30,22 +35,17 @@ class AutomationProvider extends ChangeNotifier {
     const AutomationRule(
       id: 'lowLight',
       title: 'Adaptive lighting',
-      description:
-      'Turn on the room light when the room becomes dark.',
+      description: 'Turn on the room light when the room becomes dark.',
       type: AutomationRuleType.lowLight,
       enabled: true,
       triggerValue: 100,
       unit: 'lux',
-      actions: [
-        'Turn on Room Light',
-        'Record lighting event',
-      ],
+      actions: ['Turn on Room Light', 'Record lighting event'],
     ),
     const AutomationRule(
       id: 'motionSecurity',
       title: 'Motion security',
-      description:
-      'Respond automatically when movement is detected.',
+      description: 'Respond automatically when movement is detected.',
       type: AutomationRuleType.motionSecurity,
       enabled: true,
       actions: [
@@ -57,20 +57,15 @@ class AutomationProvider extends ChangeNotifier {
     const AutomationRule(
       id: 'rainCurtain',
       title: 'Rain protection',
-      description:
-      'Close the curtain automatically during rainfall.',
+      description: 'Close the curtain automatically during rainfall.',
       type: AutomationRuleType.rainCurtain,
       enabled: true,
-      actions: [
-        'Close Smart Curtain',
-        'Record weather event',
-      ],
+      actions: ['Close Smart Curtain', 'Record weather event'],
     ),
     const AutomationRule(
       id: 'gasEmergency',
       title: 'Gas emergency response',
-      description:
-      'Activate immediate safety actions when gas rises.',
+      description: 'Activate immediate safety actions when gas rises.',
       type: AutomationRuleType.gasEmergency,
       enabled: true,
       triggerValue: 450,
@@ -85,12 +80,14 @@ class AutomationProvider extends ChangeNotifier {
     ),
   ];
 
+  final AutomationRepository? _repository;
   final List<AutomationRule> _rules;
-  final List<AutomationEvent> _events = [];
   final Set<String> _activeRuleIds = {};
+  StreamSubscription<AutomationSettingsSnapshot?>? _settingsSubscription;
 
   SensorProvider? _sensorProvider;
   DeviceProvider? _deviceProvider;
+  AlertProvider? _alertProvider;
 
   bool _masterEnabled = true;
   bool _evaluationQueued = false;
@@ -98,14 +95,11 @@ class AutomationProvider extends ChangeNotifier {
 
   bool get masterEnabled => _masterEnabled;
 
-  List<AutomationRule> get rules =>
-      List.unmodifiable(_rules);
+  List<AutomationRule> get rules => List.unmodifiable(_rules);
 
-  List<AutomationEvent> get events =>
-      List.unmodifiable(_events);
+  List<AutomationEvent> get events => _alertProvider?.alerts ?? const [];
 
-  int get enabledRuleCount =>
-      _rules.where((rule) => rule.enabled).length;
+  int get enabledRuleCount => _rules.where((rule) => rule.enabled).length;
 
   int get activeRuleCount => _activeRuleIds.length;
 
@@ -126,11 +120,50 @@ class AutomationProvider extends ChangeNotifier {
   void updateDependencies({
     required SensorProvider sensorProvider,
     required DeviceProvider deviceProvider,
+    required AlertProvider alertProvider,
   }) {
     _sensorProvider = sensorProvider;
     _deviceProvider = deviceProvider;
 
+    if (!identical(_alertProvider, alertProvider)) {
+      _alertProvider?.removeListener(_handleAlertsChanged);
+      _alertProvider = alertProvider;
+      _alertProvider?.addListener(_handleAlertsChanged);
+    }
+
     _queueEvaluation();
+  }
+
+  void _handleAlertsChanged() {
+    notifyListeners();
+  }
+
+  Future<void> start() async {
+    final repository = _repository;
+    if (repository == null) {
+      return;
+    }
+
+    await _settingsSubscription?.cancel();
+    var receivedInitialValue = false;
+    _settingsSubscription = repository.watchSettings().listen((snapshot) {
+      if (snapshot == null) {
+        if (!receivedInitialValue) {
+          receivedInitialValue = true;
+          unawaited(_persistSettings());
+        }
+        return;
+      }
+
+      receivedInitialValue = true;
+      _masterEnabled = snapshot.masterEnabled;
+      _rules
+        ..clear()
+        ..addAll(snapshot.rules);
+      _lastEvaluatedTimestamp = null;
+      notifyListeners();
+      _queueEvaluation();
+    });
   }
 
   void toggleMaster(bool value) {
@@ -147,16 +180,12 @@ class AutomationProvider extends ChangeNotifier {
     _lastEvaluatedTimestamp = null;
 
     notifyListeners();
+    unawaited(_persistSettings());
     _queueEvaluation();
   }
 
-  void toggleRule(
-      String id,
-      bool enabled,
-      ) {
-    final index = _rules.indexWhere(
-          (rule) => rule.id == id,
-    );
+  void toggleRule(String id, bool enabled) {
+    final index = _rules.indexWhere((rule) => rule.id == id);
 
     if (index == -1) {
       return;
@@ -166,9 +195,7 @@ class AutomationProvider extends ChangeNotifier {
       return;
     }
 
-    _rules[index] = _rules[index].copyWith(
-      enabled: enabled,
-    );
+    _rules[index] = _rules[index].copyWith(enabled: enabled);
 
     if (!enabled) {
       _activeRuleIds.remove(id);
@@ -177,38 +204,31 @@ class AutomationProvider extends ChangeNotifier {
     _lastEvaluatedTimestamp = null;
 
     notifyListeners();
+    unawaited(_persistSettings());
     _queueEvaluation();
   }
 
-  void updateThreshold(
-      String id,
-      double value,
-      ) {
-    final index = _rules.indexWhere(
-          (rule) => rule.id == id,
-    );
+  void updateThreshold(String id, double value) {
+    final index = _rules.indexWhere((rule) => rule.id == id);
 
     if (index == -1) {
       return;
     }
 
-    _rules[index] = _rules[index].copyWith(
-      triggerValue: value,
-    );
+    _rules[index] = _rules[index].copyWith(triggerValue: value);
 
     _lastEvaluatedTimestamp = null;
 
     notifyListeners();
+    unawaited(_persistSettings());
     _queueEvaluation();
   }
 
   void clearActivity() {
-    if (_events.isEmpty) {
-      return;
+    final alertProvider = _alertProvider;
+    if (alertProvider != null) {
+      unawaited(alertProvider.clear());
     }
-
-    _events.clear();
-    notifyListeners();
   }
 
   void runRuleTest(String id) {
@@ -219,15 +239,11 @@ class AutomationProvider extends ChangeNotifier {
       return;
     }
 
-    _executeActivation(
-      rule: rule,
-      devices: deviceProvider,
-    );
+    _executeActivation(rule: rule, devices: deviceProvider);
 
     _addEvent(
       rule: rule,
-      message:
-      'Test completed successfully. ${_activationMessage(rule)}',
+      message: 'Test completed successfully. ${_activationMessage(rule)}',
       severity: _severityForRule(rule.type),
       isTest: true,
     );
@@ -275,21 +291,14 @@ class AutomationProvider extends ChangeNotifier {
         continue;
       }
 
-      final triggered = _isTriggered(
-        rule: rule,
-        sensors: sensors,
-      );
+      final triggered = _isTriggered(rule: rule, sensors: sensors);
 
-      final wasActive =
-      _activeRuleIds.contains(rule.id);
+      final wasActive = _activeRuleIds.contains(rule.id);
 
       if (triggered && !wasActive) {
         _activeRuleIds.add(rule.id);
 
-        _executeActivation(
-          rule: rule,
-          devices: deviceProvider,
-        );
+        _executeActivation(rule: rule, devices: deviceProvider);
 
         _addEvent(
           rule: rule,
@@ -332,12 +341,10 @@ class AutomationProvider extends ChangeNotifier {
   }) {
     switch (rule.type) {
       case AutomationRuleType.temperatureFan:
-        return sensors.temperature >=
-            (rule.triggerValue ?? 30);
+        return sensors.temperature >= (rule.triggerValue ?? 30);
 
       case AutomationRuleType.lowLight:
-        return sensors.lightLevel <=
-            (rule.triggerValue ?? 100);
+        return sensors.lightLevel <= (rule.triggerValue ?? 100);
 
       case AutomationRuleType.motionSecurity:
         return sensors.motionDetected;
@@ -346,8 +353,7 @@ class AutomationProvider extends ChangeNotifier {
         return sensors.raining;
 
       case AutomationRuleType.gasEmergency:
-        return sensors.gas >=
-            (rule.triggerValue ?? 450);
+        return sensors.gas >= (rule.triggerValue ?? 450);
     }
   }
 
@@ -357,75 +363,35 @@ class AutomationProvider extends ChangeNotifier {
   }) {
     switch (rule.type) {
       case AutomationRuleType.temperatureFan:
-        _setPowerIfNeeded(
-          devices,
-          'fan',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'fan', true);
 
-        _setBrightnessIfNeeded(
-          devices,
-          'fan',
-          70,
-        );
+        _setBrightnessIfNeeded(devices, 'fan', 70);
         break;
 
       case AutomationRuleType.lowLight:
-        _setPowerIfNeeded(
-          devices,
-          'whiteLight',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'whiteLight', true);
         break;
 
       case AutomationRuleType.motionSecurity:
-        _setPowerIfNeeded(
-          devices,
-          'whiteLight',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'whiteLight', true);
 
-        _setDoorIfNeeded(
-          devices,
-          DoorLockState.locked,
-        );
+        _setDoorIfNeeded(devices, DoorLockState.locked);
         break;
 
       case AutomationRuleType.rainCurtain:
-        _setCurtainIfNeeded(
-          devices,
-          CurtainPosition.closed,
-        );
+        _setCurtainIfNeeded(devices, CurtainPosition.closed);
         break;
 
       case AutomationRuleType.gasEmergency:
-        _setPowerIfNeeded(
-          devices,
-          'buzzer',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'buzzer', true);
 
-        _setPowerIfNeeded(
-          devices,
-          'whiteLight',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'whiteLight', true);
 
-        _setPowerIfNeeded(
-          devices,
-          'rgbLight',
-          true,
-        );
+        _setPowerIfNeeded(devices, 'rgbLight', true);
 
-        _setRgbIfNeeded(
-          devices,
-          0xFFE84D4D,
-        );
+        _setRgbIfNeeded(devices, 0xFFE84D4D);
 
-        _setDoorIfNeeded(
-          devices,
-          DoorLockState.unlocked,
-        );
+        _setDoorIfNeeded(devices, DoorLockState.unlocked);
         break;
     }
   }
@@ -437,16 +403,10 @@ class AutomationProvider extends ChangeNotifier {
   }) {
     switch (rule.type) {
       case AutomationRuleType.temperatureFan:
-        final resetTemperature =
-            rule.resetValue ?? 20;
+        final resetTemperature = rule.resetValue ?? 20;
 
-        if (sensors.temperature <=
-            resetTemperature) {
-          _setPowerIfNeeded(
-            devices,
-            'fan',
-            false,
-          );
+        if (sensors.temperature <= resetTemperature) {
+          _setPowerIfNeeded(devices, 'fan', false);
 
           return 'Temperature returned below '
               '${resetTemperature.toStringAsFixed(0)}°C. '
@@ -456,11 +416,7 @@ class AutomationProvider extends ChangeNotifier {
         return null;
 
       case AutomationRuleType.lowLight:
-        _setPowerIfNeeded(
-          devices,
-          'whiteLight',
-          false,
-        );
+        _setPowerIfNeeded(devices, 'whiteLight', false);
 
         return 'Room brightness recovered. '
             'The automatic room light was turned off.';
@@ -474,20 +430,14 @@ class AutomationProvider extends ChangeNotifier {
             'The curtain remains closed for protection.';
 
       case AutomationRuleType.gasEmergency:
-        _setPowerIfNeeded(
-          devices,
-          'buzzer',
-          false,
-        );
+        _setPowerIfNeeded(devices, 'buzzer', false);
 
         return 'Gas level returned to the safe range. '
             'The emergency alarm was silenced.';
     }
   }
 
-  String _activationMessage(
-      AutomationRule rule,
-      ) {
+  String _activationMessage(AutomationRule rule) {
     switch (rule.type) {
       case AutomationRuleType.temperatureFan:
         return 'High temperature detected. '
@@ -512,9 +462,7 @@ class AutomationProvider extends ChangeNotifier {
     }
   }
 
-  AutomationSeverity _severityForRule(
-      AutomationRuleType type,
-      ) {
+  AutomationSeverity _severityForRule(AutomationRuleType type) {
     switch (type) {
       case AutomationRuleType.temperatureFan:
       case AutomationRuleType.lowLight:
@@ -537,86 +485,74 @@ class AutomationProvider extends ChangeNotifier {
   }) {
     final now = DateTime.now();
 
-    _events.insert(
-      0,
-      AutomationEvent(
-        id: now.microsecondsSinceEpoch.toString(),
-        ruleId: rule.id,
-        title: rule.title,
-        message: message,
-        createdAt: now,
-        severity: severity,
-        isTest: isTest,
-      ),
+    final event = AutomationEvent(
+      id: now.microsecondsSinceEpoch.toString(),
+      ruleId: rule.id,
+      title: rule.title,
+      message: message,
+      createdAt: now,
+      severity: severity,
+      isTest: isTest,
     );
 
-    if (_events.length > 20) {
-      _events.removeRange(20, _events.length);
-    }
+    unawaited(_alertProvider?.add(event));
   }
 
-  void _setPowerIfNeeded(
-      DeviceProvider provider,
-      String id,
-      bool value,
-      ) {
+  Future<void> _persistSettings() async {
+    await _repository?.saveSettings(
+      AutomationSettingsSnapshot(
+        masterEnabled: _masterEnabled,
+        rules: _rules,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  void _setPowerIfNeeded(DeviceProvider provider, String id, bool value) {
     final device = provider.byId(id);
 
-    if (device != null &&
-        device.isOn != value) {
+    if (device != null && device.isOn != value) {
       provider.setPower(id, value);
     }
   }
 
-  void _setBrightnessIfNeeded(
-      DeviceProvider provider,
-      String id,
-      int value,
-      ) {
+  void _setBrightnessIfNeeded(DeviceProvider provider, String id, int value) {
     final device = provider.byId(id);
 
-    if (device != null &&
-        device.brightness != value) {
+    if (device != null && device.brightness != value) {
       provider.setBrightness(id, value);
     }
   }
 
-  void _setRgbIfNeeded(
-      DeviceProvider provider,
-      int color,
-      ) {
+  void _setRgbIfNeeded(DeviceProvider provider, int color) {
     final device = provider.byId('rgbLight');
 
-    if (device != null &&
-        device.rgbColor != color) {
-      provider.setRgbColor(
-        'rgbLight',
-        color,
-      );
+    if (device != null && device.rgbColor != color) {
+      provider.setRgbColor('rgbLight', color);
     }
   }
 
-  void _setCurtainIfNeeded(
-      DeviceProvider provider,
-      CurtainPosition position,
-      ) {
+  void _setCurtainIfNeeded(DeviceProvider provider, CurtainPosition position) {
     final device = provider.byId('curtain');
 
-    if (device != null &&
-        device.curtainPosition != position) {
+    if (device != null && device.curtainPosition != position) {
       provider.setCurtainPosition(position);
     }
   }
 
-  void _setDoorIfNeeded(
-      DeviceProvider provider,
-      DoorLockState state,
-      ) {
+  void _setDoorIfNeeded(DeviceProvider provider, DoorLockState state) {
     final device = provider.byId('doorLock');
 
-    if (device != null &&
-        device.doorLockState != state) {
+    if (device != null && device.doorLockState != state) {
       provider.setDoorLockState(state);
     }
+  }
+
+  @override
+  void dispose() {
+    _alertProvider?.removeListener(_handleAlertsChanged);
+    _settingsSubscription?.cancel();
+    _repository?.dispose();
+    super.dispose();
   }
 }
