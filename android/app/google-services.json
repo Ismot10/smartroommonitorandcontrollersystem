@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "978327706168",
+    "firebase_url": "https://aurora-smart-living-default-rtdb.firebaseio.com",
+    "project_id": "aurora-smart-living",
+    "storage_bucket": "aurora-smart-living.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:978327706168:android:caf805deec948aaa00a4cd",
+        "android_client_info": {
+          "package_name": "com.example.smartroommonitorandcontrollersystem"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLHPLlYA91W91e3k00TfetyP1LSx8A0n4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

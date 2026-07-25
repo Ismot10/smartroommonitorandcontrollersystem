@@ -1,0 +1,39 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "sensors": {
+          ".validate": "newData.hasChildren(['temperature', 'humidity', 'gas', 'motion', 'rain', 'lightLevel', 'updatedAt'])",
+          "temperature": {
+            ".validate": "newData.isNumber()"
+          },
+          "humidity": {
+            ".validate": "newData.isNumber()"
+          },
+          "gas": {
+            ".validate": "newData.isNumber()"
+          },
+          "motion": {
+            ".validate": "newData.isBoolean()"
+          },
+          "rain": {
+            ".validate": "newData.isBoolean()"
+          },
+          "lightLevel": {
+            ".validate": "newData.isNumber()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          }
+        },
+        "history": {
+          ".indexOn": ["createdAt"]
+        }
+      }
+    }
+  }
+}
