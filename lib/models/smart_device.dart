@@ -1,26 +1,10 @@
-enum DeviceType {
-  whiteLight,
-  rgbLight,
-  curtain,
-  buzzer,
-  fan,
-  doorLock,
-}
+enum DeviceType { whiteLight, rgbLight, curtain, buzzer, fan, doorLock }
 
-enum DeviceConnectionType {
-  physical,
-  digitalTwin,
-}
+enum DeviceConnectionType { physical, digitalTwin }
 
-enum CurtainPosition {
-  open,
-  closed,
-}
+enum CurtainPosition { open, closed }
 
-enum DoorLockState {
-  locked,
-  unlocked,
-}
+enum DoorLockState { locked, unlocked }
 
 class SmartDevice {
   const SmartDevice({
@@ -47,11 +31,9 @@ class SmartDevice {
   final CurtainPosition curtainPosition;
   final DoorLockState doorLockState;
 
-  bool get isPhysical =>
-      connectionType == DeviceConnectionType.physical;
+  bool get isPhysical => connectionType == DeviceConnectionType.physical;
 
-  String get connectionLabel =>
-      isPhysical ? 'CONNECTED' : 'VIRTUAL DEVICE';
+  String get connectionLabel => isPhysical ? 'CONNECTED' : 'VIRTUAL DEVICE';
 
   SmartDevice copyWith({
     String? id,
@@ -94,43 +76,111 @@ class SmartDevice {
     };
   }
 
-  factory SmartDevice.fromMap(
-      String id,
-      Map<dynamic, dynamic> map,
-      ) {
+  factory SmartDevice.fromMap(String id, Map<dynamic, dynamic> raw) {
+    final map = Map<String, dynamic>.from(
+      raw.map((key, value) => MapEntry(key.toString(), value)),
+    );
+
     return SmartDevice(
       id: id,
-      name: map['name']?.toString() ?? id,
-      type: DeviceType.values.firstWhere(
-            (type) => type.name == map['type'],
-        orElse: () => DeviceType.whiteLight,
-      ),
-      connectionType: DeviceConnectionType.values.firstWhere(
-            (type) => type.name == map['connectionType'],
-        orElse: () => DeviceConnectionType.physical,
-      ),
+      name: _deviceName(id, map['name']?.toString()),
+      type:
+          _deviceTypeFromId(id) ??
+          _parseDeviceType(map['type']?.toString()) ??
+          DeviceType.whiteLight,
+      connectionType:
+          _connectionTypeFromId(id) ??
+          _parseConnectionType(map['connectionType']?.toString()) ??
+          DeviceConnectionType.physical,
       isOn: map['isOn'] == true,
       isOnline: map['isOnline'] != false,
-      brightness: _toInt(map['brightness'], fallback: 100),
-      rgbColor: _toInt(
-        map['rgbColor'],
-        fallback: 0xFF75B83B,
-      ),
-      curtainPosition: CurtainPosition.values.firstWhere(
-            (position) => position.name == map['curtainPosition'],
-        orElse: () => CurtainPosition.open,
-      ),
-      doorLockState: DoorLockState.values.firstWhere(
-            (state) => state.name == map['doorLockState'],
-        orElse: () => DoorLockState.locked,
-      ),
+      brightness: _toInt(map['brightness'], fallback: 100).clamp(0, 100),
+      rgbColor: _toInt(map['rgbColor'], fallback: 0xFF75B83B),
+      curtainPosition:
+          _parseCurtainPosition(map['curtainPosition']?.toString()) ??
+          CurtainPosition.open,
+      doorLockState:
+          _parseDoorLockState(map['doorLockState']?.toString()) ??
+          DoorLockState.locked,
     );
   }
 
-  static int _toInt(
-      dynamic value, {
-        required int fallback,
-      }) {
+  static DeviceType? _deviceTypeFromId(String id) {
+    return switch (id) {
+      'whiteLight' => DeviceType.whiteLight,
+      'rgbLight' => DeviceType.rgbLight,
+      'curtain' => DeviceType.curtain,
+      'buzzer' => DeviceType.buzzer,
+      'fan' => DeviceType.fan,
+      'doorLock' => DeviceType.doorLock,
+      _ => null,
+    };
+  }
+
+  static DeviceType? _parseDeviceType(String? value) {
+    for (final type in DeviceType.values) {
+      if (type.name == value) {
+        return type;
+      }
+    }
+    return null;
+  }
+
+  static DeviceConnectionType? _connectionTypeFromId(String id) {
+    return switch (id) {
+      'whiteLight' ||
+      'rgbLight' ||
+      'curtain' ||
+      'buzzer' => DeviceConnectionType.physical,
+      'fan' || 'doorLock' => DeviceConnectionType.digitalTwin,
+      _ => null,
+    };
+  }
+
+  static DeviceConnectionType? _parseConnectionType(String? value) {
+    for (final type in DeviceConnectionType.values) {
+      if (type.name == value) {
+        return type;
+      }
+    }
+    return null;
+  }
+
+  static String _deviceName(String id, String? storedName) {
+    if (storedName != null &&
+        storedName.trim().isNotEmpty &&
+        storedName != id) {
+      return storedName;
+    }
+
+    return switch (id) {
+      'whiteLight' => 'Room Light',
+      'rgbLight' => 'Aurora Light',
+      'curtain' => 'Smart Curtain',
+      'buzzer' => 'Safety Alarm',
+      'fan' => 'Climate Fan',
+      'doorLock' => 'Door Lock',
+      _ => storedName ?? id,
+    };
+  }
+
+  static CurtainPosition? _parseCurtainPosition(String? value) {
+    return switch (value) {
+      'open' => CurtainPosition.open,
+      'closed' || 'close' => CurtainPosition.closed,
+      _ => null,
+    };
+  }
+
+  static DoorLockState? _parseDoorLockState(String? value) {
+    return switch (value) {
+      'locked' => DoorLockState.locked,
+      'unlocked' => DoorLockState.unlocked,
+      _ => null,
+    };
+  }
+
+  static int _toInt(dynamic value, {required int fallback}) {
     if (value is num) {
       return value.toInt();
     }

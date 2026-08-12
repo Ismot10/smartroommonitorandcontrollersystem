@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/async_status_card.dart';
 import '../../models/automation_rule.dart';
 import '../../providers/alert_provider.dart';
 import '../../providers/automation_provider.dart';
@@ -87,6 +88,18 @@ class _AlertsScreenState extends State<AlertsScreen> {
                               _confirmClearAll(alertProvider);
                             },
                     ),
+
+                    if (alertProvider.isLoading ||
+                        alertProvider.error != null) ...[
+                      const SizedBox(height: 18),
+                      AsyncStatusCard(
+                        isLoading: alertProvider.isLoading,
+                        error: alertProvider.error,
+                        loadingMessage: 'Loading recent alerts…',
+                        errorTitle: 'Alerts could not be refreshed',
+                        onRetry: alertProvider.start,
+                      ),
+                    ],
 
                     const SizedBox(height: 22),
 

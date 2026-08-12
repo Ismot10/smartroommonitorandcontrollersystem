@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/smart_device.dart';
 import '../../providers/device_provider.dart';
+import '../../providers/schedule_provider.dart';
+import '../schedules/schedules_screen.dart';
 
 class DeviceDetailScreen extends StatelessWidget {
   const DeviceDetailScreen({required this.deviceId, super.key});
@@ -52,6 +54,11 @@ class DeviceDetailScreen extends StatelessWidget {
                       onTap: () => Navigator.pop(context),
                     ),
                     const Spacer(),
+                    _CircleButton(
+                      icon: Icons.schedule_rounded,
+                      onTap: () => _openSchedules(context),
+                    ),
+                    const SizedBox(width: 9),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -106,6 +113,23 @@ class DeviceDetailScreen extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openSchedules(BuildContext context) {
+    final devices = context.read<DeviceProvider>();
+    final schedules = context.read<ScheduleProvider>();
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<DeviceProvider>.value(value: devices),
+            ChangeNotifierProvider<ScheduleProvider>.value(value: schedules),
+          ],
+          child: SchedulesScreen(initialDeviceId: deviceId),
         ),
       ),
     );
@@ -260,7 +284,7 @@ class DeviceDetailScreen extends StatelessWidget {
             SegmentedButton<CurtainPosition>(
               style: ButtonStyle(
                 padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(vertical: 18),
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 ),
                 shape: WidgetStatePropertyAll(
                   RoundedRectangleBorder(

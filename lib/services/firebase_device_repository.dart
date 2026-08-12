@@ -51,19 +51,50 @@ class FirebaseDeviceRepository implements DeviceRepository {
 
   @override
   Future<void> saveDevice(SmartDevice device) {
-    return _reference.child(device.id).set(device.toMap());
+    return _reference.child(device.id).update(device.toMap());
   }
 
   @override
   Future<void> seedDevicesIfEmpty(List<SmartDevice> devices) async {
     final snapshot = await _reference.get();
-    if (snapshot.exists) {
-      return;
+    final value = snapshot.value;
+    final existingDevices = value is Map ? value : const <Object?, Object?>{};
+    final updates = <String, Object?>{};
+
+    for (final device in devices) {
+      final rawDevice = existingDevices[device.id];
+
+      if (rawDevice is! Map) {
+        updates[device.id] = device.toMap();
+        continue;
+      }
+
+      // Repair identity metadata only. Operational fields are deliberately
+      // excluded because Flutter and the ESP32 may update them concurrently.
+      if (rawDevice['id']?.toString() != device.id) {
+        updates['${device.id}/id'] = device.id;
+      }
+
+      final storedName = rawDevice['name']?.toString();
+      if (storedName == null ||
+          storedName.trim().isEmpty ||
+          storedName == device.id) {
+        updates['${device.id}/name'] = device.name;
+      }
+
+      if (rawDevice['type']?.toString() != device.type.name) {
+        updates['${device.id}/type'] = device.type.name;
+      }
+
+      if (rawDevice['connectionType']?.toString() !=
+          device.connectionType.name) {
+        updates['${device.id}/connectionType'] = device.connectionType.name;
+      }
     }
 
-    await _reference.set({
-      for (final device in devices) device.id: device.toMap(),
-    });
+    if (updates.isNotEmpty) {
+      await _reference.update(updates);
+    }
   }
 
   @override

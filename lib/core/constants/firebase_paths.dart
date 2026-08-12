@@ -1,6 +1,8 @@
 import 'app_config.dart';
 
 abstract final class FirebasePaths {
+  static String user(String uid) => 'users/$uid';
+
   static String get roomRoot => 'rooms/${AppConfig.roomId}';
 
   static String get sensors => '$roomRoot/sensors';

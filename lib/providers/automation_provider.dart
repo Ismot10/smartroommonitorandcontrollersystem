@@ -91,9 +91,13 @@ class AutomationProvider extends ChangeNotifier {
 
   bool _masterEnabled = true;
   bool _evaluationQueued = false;
+  bool _isLoading = true;
+  String? _error;
   DateTime? _lastEvaluatedTimestamp;
 
   bool get masterEnabled => _masterEnabled;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
 
   List<AutomationRule> get rules => List.unmodifiable(_rules);
 
@@ -141,29 +145,47 @@ class AutomationProvider extends ChangeNotifier {
   Future<void> start() async {
     final repository = _repository;
     if (repository == null) {
+      _isLoading = false;
+      _error = null;
+      notifyListeners();
       return;
     }
 
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     await _settingsSubscription?.cancel();
     var receivedInitialValue = false;
-    _settingsSubscription = repository.watchSettings().listen((snapshot) {
-      if (snapshot == null) {
-        if (!receivedInitialValue) {
-          receivedInitialValue = true;
-          unawaited(_persistSettings());
+    _settingsSubscription = repository.watchSettings().listen(
+      (snapshot) {
+        if (snapshot == null) {
+          if (!receivedInitialValue) {
+            receivedInitialValue = true;
+            unawaited(_persistSettings());
+          }
+          _isLoading = false;
+          _error = null;
+          notifyListeners();
+          return;
         }
-        return;
-      }
 
-      receivedInitialValue = true;
-      _masterEnabled = snapshot.masterEnabled;
-      _rules
-        ..clear()
-        ..addAll(snapshot.rules);
-      _lastEvaluatedTimestamp = null;
-      notifyListeners();
-      _queueEvaluation();
-    });
+        receivedInitialValue = true;
+        _isLoading = false;
+        _error = null;
+        _masterEnabled = snapshot.masterEnabled;
+        _rules
+          ..clear()
+          ..addAll(snapshot.rules);
+        _lastEvaluatedTimestamp = null;
+        notifyListeners();
+        _queueEvaluation();
+      },
+      onError: (Object error) {
+        _isLoading = false;
+        _error = error.toString();
+        notifyListeners();
+      },
+    );
   }
 
   void toggleMaster(bool value) {

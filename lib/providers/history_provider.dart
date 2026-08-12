@@ -6,72 +6,57 @@ import '../models/history_record.dart';
 import '../models/sensor_data.dart';
 import '../services/history_repository.dart';
 
-enum HistoryRange {
-  hour,
-  day,
-  week,
-}
+enum HistoryRange { hour, day, week }
 
-enum HistoryMetric {
-  temperature,
-  humidity,
-  gas,
-  light,
-}
+enum HistoryMetric { temperature, humidity, gas, light }
 
 class HistoryProvider extends ChangeNotifier {
-  HistoryProvider({
-    required HistoryRepository repository,
-  }) : _repository = repository;
+  HistoryProvider({required HistoryRepository repository})
+    : _repository = repository;
 
   final HistoryRepository _repository;
 
-  StreamSubscription<List<HistoryRecord>>?
-  _subscription;
+  StreamSubscription<List<HistoryRecord>>? _subscription;
 
   final List<HistoryRecord> _records = [];
 
-  HistoryRange _selectedRange =
-      HistoryRange.day;
+  HistoryRange _selectedRange = HistoryRange.day;
 
-  HistoryMetric _selectedMetric =
-      HistoryMetric.temperature;
+  HistoryMetric _selectedMetric = HistoryMetric.temperature;
 
   bool _isLoading = true;
   String? _error;
   DateTime? _lastCapturedAt;
   bool _captureQueued = false;
 
-  List<HistoryRecord> get records =>
-      List.unmodifiable(_records);
+  List<HistoryRecord> get records => List.unmodifiable(_records);
 
-  HistoryRange get selectedRange =>
-      _selectedRange;
+  HistoryRange get selectedRange => _selectedRange;
 
-  HistoryMetric get selectedMetric =>
-      _selectedMetric;
+  HistoryMetric get selectedMetric => _selectedMetric;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
 
   Future<void> start() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
-      final initialRecords =
-      await _repository.getRecords();
+      final initialRecords = await _repository.getRecords();
 
       _replaceRecords(initialRecords);
 
       await _subscription?.cancel();
 
-      _subscription =
-          _repository.watchRecords().listen(
-            _replaceRecords,
-            onError: (Object error) {
-              _error = error.toString();
-              _isLoading = false;
-              notifyListeners();
-            },
-          );
+      _subscription = _repository.watchRecords().listen(
+        _replaceRecords,
+        onError: (Object error) {
+          _error = error.toString();
+          _isLoading = false;
+          notifyListeners();
+        },
+      );
     } catch (error) {
       _error = error.toString();
       _isLoading = false;
@@ -79,11 +64,8 @@ class HistoryProvider extends ChangeNotifier {
     }
   }
 
-  void captureSensorData(
-      SensorData data,
-      ) {
-    if (_lastCapturedAt == data.updatedAt ||
-        _captureQueued) {
+  void captureSensorData(SensorData data) {
+    if (_lastCapturedAt == data.updatedAt || _captureQueued) {
       return;
     }
 
@@ -98,9 +80,7 @@ class HistoryProvider extends ChangeNotifier {
 
       _lastCapturedAt = data.updatedAt;
 
-      await _repository.addRecord(
-        HistoryRecord.fromSensorData(data),
-      );
+      await _repository.addRecord(HistoryRecord.fromSensorData(data));
     });
   }
 
@@ -126,44 +106,31 @@ class HistoryProvider extends ChangeNotifier {
     final now = DateTime.now();
 
     final startTime = switch (_selectedRange) {
-      HistoryRange.hour =>
-          now.subtract(const Duration(hours: 1)),
-      HistoryRange.day =>
-          now.subtract(const Duration(days: 1)),
-      HistoryRange.week =>
-          now.subtract(const Duration(days: 7)),
+      HistoryRange.hour => now.subtract(const Duration(hours: 1)),
+      HistoryRange.day => now.subtract(const Duration(days: 1)),
+      HistoryRange.week => now.subtract(const Duration(days: 7)),
     };
 
     return _records
-        .where(
-          (record) =>
-          record.createdAt.isAfter(startTime),
-    )
+        .where((record) => record.createdAt.isAfter(startTime))
         .toList();
   }
 
-  double valueForRecord(
-      HistoryRecord record,
-      ) {
+  double valueForRecord(HistoryRecord record) {
     return switch (_selectedMetric) {
-      HistoryMetric.temperature =>
-      record.temperature,
-      HistoryMetric.humidity =>
-      record.humidity,
+      HistoryMetric.temperature => record.temperature,
+      HistoryMetric.humidity => record.humidity,
       HistoryMetric.gas => record.gas,
-      HistoryMetric.light =>
-      record.lightLevel,
+      HistoryMetric.light => record.lightLevel,
     };
   }
 
   String get metricTitle {
     return switch (_selectedMetric) {
-      HistoryMetric.temperature =>
-      'Temperature',
+      HistoryMetric.temperature => 'Temperature',
       HistoryMetric.humidity => 'Humidity',
       HistoryMetric.gas => 'Smoke / Gas',
-      HistoryMetric.light =>
-      'Light intensity',
+      HistoryMetric.light => 'Light intensity',
     };
   }
 
@@ -177,50 +144,35 @@ class HistoryProvider extends ChangeNotifier {
   }
 
   double get averageValue {
-    final values = filteredRecords
-        .map(valueForRecord)
-        .toList();
+    final values = filteredRecords.map(valueForRecord).toList();
 
     if (values.isEmpty) {
       return 0;
     }
 
-    final total = values.fold<double>(
-      0,
-          (sum, value) => sum + value,
-    );
+    final total = values.fold<double>(0, (sum, value) => sum + value);
 
     return total / values.length;
   }
 
   double get minimumValue {
-    final values = filteredRecords
-        .map(valueForRecord)
-        .toList();
+    final values = filteredRecords.map(valueForRecord).toList();
 
     if (values.isEmpty) {
       return 0;
     }
 
-    return values.reduce(
-          (first, second) =>
-      first < second ? first : second,
-    );
+    return values.reduce((first, second) => first < second ? first : second);
   }
 
   double get maximumValue {
-    final values = filteredRecords
-        .map(valueForRecord)
-        .toList();
+    final values = filteredRecords.map(valueForRecord).toList();
 
     if (values.isEmpty) {
       return 0;
     }
 
-    return values.reduce(
-          (first, second) =>
-      first > second ? first : second,
-    );
+    return values.reduce((first, second) => first > second ? first : second);
   }
 
   double get trendValue {
@@ -230,42 +182,26 @@ class HistoryProvider extends ChangeNotifier {
       return 0;
     }
 
-    return valueForRecord(visible.last) -
-        valueForRecord(visible.first);
+    return valueForRecord(visible.last) - valueForRecord(visible.first);
   }
 
   int get motionEventCount {
-    return filteredRecords
-        .where(
-          (record) => record.motionDetected,
-    )
-        .length;
+    return filteredRecords.where((record) => record.motionDetected).length;
   }
 
   int get rainEventCount {
-    return filteredRecords
-        .where(
-          (record) => record.raining,
-    )
-        .length;
+    return filteredRecords.where((record) => record.raining).length;
   }
 
   Future<void> clearHistory() async {
     await _repository.clearRecords();
   }
 
-  void _replaceRecords(
-      List<HistoryRecord> incoming,
-      ) {
+  void _replaceRecords(List<HistoryRecord> incoming) {
     _records
       ..clear()
       ..addAll(incoming)
-      ..sort(
-            (first, second) =>
-            first.createdAt.compareTo(
-              second.createdAt,
-            ),
-      );
+      ..sort((first, second) => first.createdAt.compareTo(second.createdAt));
 
     _isLoading = false;
     _error = null;

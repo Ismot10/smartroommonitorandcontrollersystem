@@ -3,16 +3,19 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/async_status_card.dart';
 import '../../models/automation_rule.dart';
 import '../../providers/automation_provider.dart';
+import '../../providers/device_provider.dart';
+import '../../providers/schedule_provider.dart';
+import '../schedules/schedules_screen.dart';
 
 class AutomationScreen extends StatelessWidget {
   const AutomationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final provider =
-    context.watch<AutomationProvider>();
+    final provider = context.watch<AutomationProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.lightBackground,
@@ -34,132 +37,105 @@ class AutomationScreen extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  22,
-                  16,
-                  22,
-                  120,
-                ),
+                padding: const EdgeInsets.fromLTRB(22, 16, 22, 120),
                 sliver: SliverList(
-                  delegate: SliverChildListDelegate(
-                    [
-                      const _AutomationHeader(),
+                  delegate: SliverChildListDelegate([
+                    const _AutomationHeader(),
 
-                      const SizedBox(height: 22),
-
-                      _AutomationHero(
-                        masterEnabled:
-                        provider.masterEnabled,
-                        enabledRules:
-                        provider.enabledRuleCount,
-                        activeRules:
-                        provider.activeRuleCount,
-                        totalRules:
-                        provider.rules.length,
-                        onMasterChanged:
-                        provider.toggleMaster,
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      const _SectionHeader(
-                        title: 'Smart rules',
-                        subtitle:
-                        'Rules respond automatically to your live sensor data.',
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      ...provider.rules.map(
-                            (rule) => Padding(
-                          padding:
-                          const EdgeInsets.only(
-                            bottom: 15,
-                          ),
-                          child: _AutomationRuleCard(
-                            rule: rule,
-                            isActive:
-                            provider.isRuleActive(
-                              rule.id,
-                            ),
-                            onToggle: (value) {
-                              provider.toggleRule(
-                                rule.id,
-                                value,
-                              );
-                            },
-                            onEdit: () {
-                              _showRuleEditor(
-                                context,
-                                rule,
-                              );
-                            },
-                            onTest: () {
-                              provider.runRuleTest(
-                                rule.id,
-                              );
-
-                              ScaffoldMessenger.of(
-                                context,
-                              ).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    '${rule.title} test completed.',
-                                  ),
-                                  behavior:
-                                  SnackBarBehavior
-                                      .floating,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-
+                    if (provider.isLoading || provider.error != null) ...[
                       const SizedBox(height: 18),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SectionHeader(
-                              title:
-                              'Recent activity',
-                              subtitle:
-                              'Actions performed by your automation rules.',
-                            ),
-                          ),
-                          if (provider.events.isNotEmpty)
-                            TextButton(
-                              onPressed:
-                              provider.clearActivity,
-                              child:
-                              const Text('Clear'),
-                            ),
-                        ],
+                      AsyncStatusCard(
+                        isLoading: provider.isLoading,
+                        error: provider.error,
+                        loadingMessage: 'Loading automation rules…',
+                        errorTitle: 'Automation rules could not be refreshed',
+                        onRetry: provider.start,
                       ),
+                    ],
 
-                      const SizedBox(height: 14),
+                    const SizedBox(height: 22),
 
-                      if (provider.events.isEmpty)
-                        const _EmptyActivityCard()
-                      else
-                        ...provider.events
-                            .take(8)
-                            .map(
-                              (event) => Padding(
-                            padding:
-                            const EdgeInsets
-                                .only(
-                              bottom: 12,
-                            ),
-                            child:
-                            _AutomationEventCard(
-                              event: event,
-                            ),
+                    _AutomationHero(
+                      masterEnabled: provider.masterEnabled,
+                      enabledRules: provider.enabledRuleCount,
+                      activeRules: provider.activeRuleCount,
+                      totalRules: provider.rules.length,
+                      onMasterChanged: provider.toggleMaster,
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    const _SectionHeader(
+                      title: 'Smart rules',
+                      subtitle:
+                          'Rules respond automatically to your live sensor data.',
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    ...provider.rules.map(
+                      (rule) => Padding(
+                        padding: const EdgeInsets.only(bottom: 15),
+                        child: _AutomationRuleCard(
+                          rule: rule,
+                          isActive: provider.isRuleActive(rule.id),
+                          onToggle: (value) {
+                            provider.toggleRule(rule.id, value);
+                          },
+                          onEdit: () {
+                            _showRuleEditor(context, rule);
+                          },
+                          onTest: () {
+                            provider.runRuleTest(rule.id);
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${rule.title} test completed.'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    _SchedulesShortcut(onTap: () => _openSchedules(context)),
+
+                    const SizedBox(height: 18),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SectionHeader(
+                            title: 'Recent activity',
+                            subtitle:
+                                'Actions performed by your automation rules.',
                           ),
                         ),
-                    ],
-                  ),
+                        if (provider.events.isNotEmpty)
+                          TextButton(
+                            onPressed: provider.clearActivity,
+                            child: const Text('Clear'),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    if (provider.events.isEmpty)
+                      const _EmptyActivityCard()
+                    else
+                      ...provider.events
+                          .take(8)
+                          .map(
+                            (event) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _AutomationEventCard(event: event),
+                            ),
+                          ),
+                  ]),
                 ),
               ),
             ],
@@ -169,32 +145,40 @@ class AutomationScreen extends StatelessWidget {
     );
   }
 
+  static void _openSchedules(BuildContext context) {
+    final devices = context.read<DeviceProvider>();
+    final schedules = context.read<ScheduleProvider>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<DeviceProvider>.value(value: devices),
+            ChangeNotifierProvider<ScheduleProvider>.value(value: schedules),
+          ],
+          child: const SchedulesScreen(),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showRuleEditor(
-      BuildContext context,
-      AutomationRule rule,
-      ) async {
-    var draftThreshold =
-        rule.triggerValue ?? 0;
+    BuildContext context,
+    AutomationRule rule,
+  ) async {
+    var draftThreshold = rule.triggerValue ?? 0;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor:
-      AppColors.lightBackground,
+      backgroundColor: AppColors.lightBackground,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(32),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
       ),
       builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (
-              context,
-              setModalState,
-              ) {
-            final range =
-            _sliderRange(rule.type);
+          builder: (context, setModalState) {
+            final range = _sliderRange(rule.type);
 
             return SafeArea(
               child: Padding(
@@ -202,73 +186,44 @@ class AutomationScreen extends StatelessWidget {
                   22,
                   8,
                   22,
-                  24 +
-                      MediaQuery.viewInsetsOf(
-                        context,
-                      ).bottom,
+                  24 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
                 child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                    mainAxisSize:
-                    MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
                           Container(
                             width: 52,
                             height: 52,
-                            decoration:
-                            BoxDecoration(
-                              color:
-                              _accentForRule(
+                            decoration: BoxDecoration(
+                              color: _accentForRule(
                                 rule.type,
-                              ).withValues(
-                                alpha: 0.14,
-                              ),
-                              borderRadius:
-                              BorderRadius
-                                  .circular(18),
+                              ).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(18),
                             ),
                             child: Icon(
-                              _iconForRule(
-                                rule.type,
-                              ),
-                              color:
-                              _accentForRule(
-                                rule.type,
-                              ),
+                              _iconForRule(rule.type),
+                              color: _accentForRule(rule.type),
                             ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   rule.title,
-                                  style: Theme.of(
-                                    context,
-                                  )
-                                      .textTheme
-                                      .titleLarge
-                                      ?.copyWith(
-                                    fontWeight:
-                                    FontWeight
-                                        .w800,
-                                  ),
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w800),
                                 ),
-                                const SizedBox(
-                                  height: 3,
-                                ),
+                                const SizedBox(height: 3),
                                 const Text(
                                   'Automation rule settings',
                                   style: TextStyle(
-                                    color: AppColors
-                                        .lightTextSecondary,
+                                    color: AppColors.lightTextSecondary,
                                   ),
                                 ),
                               ],
@@ -280,24 +235,17 @@ class AutomationScreen extends StatelessWidget {
                       const SizedBox(height: 25),
 
                       SwitchListTile.adaptive(
-                        contentPadding:
-                        EdgeInsets.zero,
+                        contentPadding: EdgeInsets.zero,
                         title: const Text(
                           'Enable this rule',
-                          style: TextStyle(
-                            fontWeight:
-                            FontWeight.w800,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: const Text(
                           'Allow this rule to perform automatic actions.',
                         ),
                         value: rule.enabled,
                         onChanged: (value) {
-                          context
-                              .read<
-                              AutomationProvider>()
-                              .toggleRule(
+                          context.read<AutomationProvider>().toggleRule(
                             rule.id,
                             value,
                           );
@@ -311,20 +259,16 @@ class AutomationScreen extends StatelessWidget {
                           'Trigger threshold',
                           style: TextStyle(
                             fontSize: 18,
-                            fontWeight:
-                            FontWeight.w800,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
 
                         const SizedBox(height: 7),
 
                         Text(
-                          _thresholdDescription(
-                            rule.type,
-                          ),
+                          _thresholdDescription(rule.type),
                           style: const TextStyle(
-                            color: AppColors
-                                .lightTextSecondary,
+                            color: AppColors.lightTextSecondary,
                             height: 1.5,
                           ),
                         ),
@@ -333,34 +277,22 @@ class AutomationScreen extends StatelessWidget {
 
                         Center(
                           child: Container(
-                            padding:
-                            const EdgeInsets
-                                .symmetric(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 13,
                             ),
-                            decoration:
-                            BoxDecoration(
-                              color:
-                              _accentForRule(
+                            decoration: BoxDecoration(
+                              color: _accentForRule(
                                 rule.type,
-                              ).withValues(
-                                alpha: 0.12,
-                              ),
-                              borderRadius:
-                              BorderRadius
-                                  .circular(20),
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${_formatThreshold(draftThreshold)} ${rule.unit}',
                               style: TextStyle(
-                                color:
-                                _accentForRule(
-                                  rule.type,
-                                ),
+                                color: _accentForRule(rule.type),
                                 fontSize: 26,
-                                fontWeight:
-                                FontWeight.w800,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
@@ -373,21 +305,14 @@ class AutomationScreen extends StatelessWidget {
                           max: range.$2,
                           divisions: range.$3,
                           value: draftThreshold
-                              .clamp(
-                            range.$1,
-                            range.$2,
-                          )
+                              .clamp(range.$1, range.$2)
                               .toDouble(),
-                          activeColor:
-                          _accentForRule(
-                            rule.type,
-                          ),
+                          activeColor: _accentForRule(rule.type),
                           label:
-                          '${_formatThreshold(draftThreshold)} ${rule.unit}',
+                              '${_formatThreshold(draftThreshold)} ${rule.unit}',
                           onChanged: (value) {
                             setModalState(() {
-                              draftThreshold =
-                                  value;
+                              draftThreshold = value;
                             });
                           },
                         ),
@@ -399,8 +324,7 @@ class AutomationScreen extends StatelessWidget {
                         'Automatic actions',
                         style: TextStyle(
                           fontSize: 18,
-                          fontWeight:
-                          FontWeight.w800,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
 
@@ -409,52 +333,36 @@ class AutomationScreen extends StatelessWidget {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children:
-                        rule.actions.map(
-                              (action) {
-                            return Container(
-                              padding:
-                              const EdgeInsets
-                                  .symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration:
-                              BoxDecoration(
-                                color: Colors.white,
-                                borderRadius:
-                                BorderRadius
-                                    .circular(18),
-                              ),
-                              child: Row(
-                                mainAxisSize:
-                                MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons
-                                        .check_circle_rounded,
-                                    color: AppColors
-                                        .safe,
-                                    size: 17,
+                        children: rule.actions.map((action) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.safe,
+                                  size: 17,
+                                ),
+                                const SizedBox(width: 7),
+                                Text(
+                                  action,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  const SizedBox(
-                                    width: 7,
-                                  ),
-                                  Text(
-                                    action,
-                                    style:
-                                    const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight:
-                                      FontWeight
-                                          .w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ).toList(),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                       ),
 
                       const SizedBox(height: 28),
@@ -466,37 +374,24 @@ class AutomationScreen extends StatelessWidget {
                           onPressed: () {
                             if (range != null) {
                               context
-                                  .read<
-                                  AutomationProvider>()
-                                  .updateThreshold(
-                                rule.id,
-                                draftThreshold,
-                              );
+                                  .read<AutomationProvider>()
+                                  .updateThreshold(rule.id, draftThreshold);
                             }
 
-                            Navigator.pop(
-                              sheetContext,
-                            );
+                            Navigator.pop(sheetContext);
                           },
-                          style:
-                          FilledButton.styleFrom(
-                            backgroundColor:
-                            AppColors.primaryDark,
-                            foregroundColor:
-                            Colors.white,
-                            shape:
-                            RoundedRectangleBorder(
-                              borderRadius:
-                              BorderRadius
-                                  .circular(20),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.primaryDark,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
                             ),
                           ),
                           child: const Text(
                             'Save rule',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight:
-                              FontWeight.w800,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
@@ -512,10 +407,7 @@ class AutomationScreen extends StatelessWidget {
     );
   }
 
-  static (double, double, int)?
-  _sliderRange(
-      AutomationRuleType type,
-      ) {
+  static (double, double, int)? _sliderRange(AutomationRuleType type) {
     switch (type) {
       case AutomationRuleType.temperatureFan:
         return (18, 40, 22);
@@ -532,9 +424,7 @@ class AutomationScreen extends StatelessWidget {
     }
   }
 
-  static String _thresholdDescription(
-      AutomationRuleType type,
-      ) {
+  static String _thresholdDescription(AutomationRuleType type) {
     switch (type) {
       case AutomationRuleType.temperatureFan:
         return 'The virtual fan turns on when temperature reaches this value.';
@@ -553,9 +443,7 @@ class AutomationScreen extends StatelessWidget {
     }
   }
 
-  static String _formatThreshold(
-      double value,
-      ) {
+  static String _formatThreshold(double value) {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
     }
@@ -573,17 +461,12 @@ class _AutomationHeader extends StatelessWidget {
       children: [
         Expanded(
           child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Automation',
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(
-                  fontWeight:
-                  FontWeight.w800,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
                   letterSpacing: -1,
                 ),
               ),
@@ -591,8 +474,7 @@ class _AutomationHeader extends StatelessWidget {
               const Text(
                 'Intelligent responses for comfort, safety and security.',
                 style: TextStyle(
-                  color: AppColors
-                      .lightTextSecondary,
+                  color: AppColors.lightTextSecondary,
                   height: 1.45,
                 ),
               ),
@@ -603,11 +485,8 @@ class _AutomationHeader extends StatelessWidget {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(
-              alpha: 0.8,
-            ),
-            borderRadius:
-            BorderRadius.circular(18),
+            color: Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: const Icon(
             Icons.auto_awesome_rounded,
@@ -637,49 +516,32 @@ class _AutomationHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration:
-      const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        borderRadius:
-        BorderRadius.circular(34),
+        borderRadius: BorderRadius.circular(34),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: masterEnabled
-              ? const [
-            Color(0xFF176B4A),
-            Color(0xFF42A15A),
-            Color(0xFF8BCD4C),
-          ]
-              : const [
-            Color(0xFF777E79),
-            Color(0xFFA2A7A3),
-          ],
+              ? const [Color(0xFF176B4A), Color(0xFF42A15A), Color(0xFF8BCD4C)]
+              : const [Color(0xFF777E79), Color(0xFFA2A7A3)],
         ),
         boxShadow: [
           BoxShadow(
-            color: (
-                masterEnabled
-                    ? AppColors.primaryDark
-                    : AppColors.offline
-            ).withValues(alpha: 0.22),
+            color: (masterEnabled ? AppColors.primaryDark : AppColors.offline)
+                .withValues(alpha: 0.22),
             blurRadius: 30,
             offset: const Offset(0, 16),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.bolt_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
+              const Icon(Icons.bolt_rounded, color: Colors.white, size: 28),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -687,8 +549,7 @@ class _AutomationHero extends StatelessWidget {
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 11,
-                    fontWeight:
-                    FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 1.3,
                   ),
                 ),
@@ -696,10 +557,8 @@ class _AutomationHero extends StatelessWidget {
               Switch.adaptive(
                 value: masterEnabled,
                 onChanged: onMasterChanged,
-                activeTrackColor:
-                Colors.white38,
-                activeThumbColor:
-                Colors.white,
+                activeTrackColor: Colors.white38,
+                activeThumbColor: Colors.white,
               ),
             ],
           ),
@@ -730,17 +589,11 @@ class _AutomationHero extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _HeroValue(
-                  value: '$enabledRules',
-                  label: 'Enabled',
-                ),
+                child: _HeroValue(value: '$enabledRules', label: 'Enabled'),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _HeroValue(
-                  value: '$activeRules',
-                  label: 'Active now',
-                ),
+                child: _HeroValue(value: '$activeRules', label: 'Active now'),
               ),
             ],
           ),
@@ -751,10 +604,7 @@ class _AutomationHero extends StatelessWidget {
 }
 
 class _HeroValue extends StatelessWidget {
-  const _HeroValue({
-    required this.value,
-    required this.label,
-  });
+  const _HeroValue({required this.value, required this.label});
 
   final String value;
   final String label;
@@ -762,15 +612,10 @@ class _HeroValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 14,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color:
-        Colors.white.withValues(alpha: 0.16),
-        borderRadius:
-        BorderRadius.circular(20),
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         children: [
@@ -798,8 +643,7 @@ class _HeroValue extends StatelessWidget {
   }
 }
 
-class _AutomationRuleCard
-    extends StatelessWidget {
+class _AutomationRuleCard extends StatelessWidget {
   const _AutomationRuleCard({
     required this.rule,
     required this.isActive,
@@ -816,34 +660,25 @@ class _AutomationRuleCard
 
   @override
   Widget build(BuildContext context) {
-    final accent =
-    _accentForRule(rule.type);
+    final accent = _accentForRule(rule.type);
 
     return AnimatedContainer(
-      duration:
-      const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(
-          alpha: rule.enabled ? 0.84 : 0.58,
-        ),
-        borderRadius:
-        BorderRadius.circular(28),
+        color: Colors.white.withValues(alpha: rule.enabled ? 0.84 : 0.58),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(
           color: isActive
               ? accent.withValues(alpha: 0.55)
-              : Colors.white.withValues(
-            alpha: 0.9,
-          ),
+              : Colors.white.withValues(alpha: 0.9),
           width: isActive ? 1.6 : 1,
         ),
         boxShadow: [
           BoxShadow(
             color: isActive
                 ? accent.withValues(alpha: 0.13)
-                : Colors.black.withValues(
-              alpha: 0.035,
-            ),
+                : Colors.black.withValues(alpha: 0.035),
             blurRadius: 22,
             offset: const Offset(0, 11),
           ),
@@ -852,46 +687,29 @@ class _AutomationRuleCard
       child: Column(
         children: [
           Row(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 54,
                 height: 54,
                 decoration: BoxDecoration(
-                  color: accent.withValues(
-                    alpha: 0.13,
-                  ),
-                  borderRadius:
-                  BorderRadius.circular(18),
+                  color: accent.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                child: Icon(
-                  _iconForRule(rule.type),
-                  color: accent,
-                  size: 27,
-                ),
+                child: Icon(_iconForRule(rule.type), color: accent, size: 27),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             rule.title,
-                            style: Theme.of(
-                              context,
-                            )
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                              fontWeight:
-                              FontWeight
-                                  .w800,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                         ),
                         Switch.adaptive(
@@ -903,8 +721,7 @@ class _AutomationRuleCard
                     Text(
                       rule.description,
                       style: const TextStyle(
-                        color: AppColors
-                            .lightTextSecondary,
+                        color: AppColors.lightTextSecondary,
                         height: 1.45,
                       ),
                     ),
@@ -931,14 +748,12 @@ class _AutomationRuleCard
                     : AppColors.offline,
               ),
 
-              if (rule.triggerValue !=
-                  null) ...[
+              if (rule.triggerValue != null) ...[
                 const SizedBox(width: 8),
                 _RuleStatusChip(
                   text:
-                  '${_formatRuleThreshold(rule.triggerValue!)} ${rule.unit}',
-                  color:
-                  AppColors.lightText,
+                      '${_formatRuleThreshold(rule.triggerValue!)} ${rule.unit}',
+                  color: AppColors.lightText,
                 ),
               ],
 
@@ -946,19 +761,14 @@ class _AutomationRuleCard
 
               TextButton.icon(
                 onPressed: onTest,
-                icon: const Icon(
-                  Icons.play_arrow_rounded,
-                  size: 18,
-                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
                 label: const Text('Test'),
               ),
 
               IconButton(
                 onPressed: onEdit,
                 tooltip: 'Edit rule',
-                icon: const Icon(
-                  Icons.tune_rounded,
-                ),
+                icon: const Icon(Icons.tune_rounded),
               ),
             ],
           ),
@@ -967,9 +777,7 @@ class _AutomationRuleCard
     );
   }
 
-  static String _formatRuleThreshold(
-      double value,
-      ) {
+  static String _formatRuleThreshold(double value) {
     return value == value.roundToDouble()
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(1);
@@ -977,10 +785,7 @@ class _AutomationRuleCard
 }
 
 class _RuleStatusChip extends StatelessWidget {
-  const _RuleStatusChip({
-    required this.text,
-    required this.color,
-  });
+  const _RuleStatusChip({required this.text, required this.color});
 
   final String text;
   final Color color;
@@ -988,14 +793,10 @@ class _RuleStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
-        borderRadius:
-        BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
         text,
@@ -1010,49 +811,34 @@ class _RuleStatusChip extends StatelessWidget {
   }
 }
 
-class _AutomationEventCard
-    extends StatelessWidget {
-  const _AutomationEventCard({
-    required this.event,
-  });
+class _AutomationEventCard extends StatelessWidget {
+  const _AutomationEventCard({required this.event});
 
   final AutomationEvent event;
 
   @override
   Widget build(BuildContext context) {
-    final accent =
-    _severityColor(event.severity);
+    final accent = _severityColor(event.severity);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color:
-        Colors.white.withValues(alpha: 0.8),
-        borderRadius:
-        BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white.withValues(
-            alpha: 0.9,
-          ),
-        ),
+        color: Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
       ),
       child: Row(
-        crossAxisAlignment:
-        CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 43,
             height: 43,
             decoration: BoxDecoration(
-              color:
-              accent.withValues(alpha: 0.12),
-              borderRadius:
-              BorderRadius.circular(15),
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(
-              event.isTest
-                  ? Icons.science_rounded
-                  : Icons.bolt_rounded,
+              event.isTest ? Icons.science_rounded : Icons.bolt_rounded,
               color: accent,
               size: 21,
             ),
@@ -1060,28 +846,20 @@ class _AutomationEventCard
           const SizedBox(width: 13),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Expanded(
                       child: Text(
                         event.title,
-                        style: const TextStyle(
-                          fontWeight:
-                          FontWeight.w800,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
                     Text(
-                      DateFormat('h:mm a')
-                          .format(
-                        event.createdAt,
-                      ),
+                      DateFormat('h:mm a').format(event.createdAt),
                       style: const TextStyle(
-                        color: AppColors
-                            .lightTextSecondary,
+                        color: AppColors.lightTextSecondary,
                         fontSize: 11,
                       ),
                     ),
@@ -1091,8 +869,7 @@ class _AutomationEventCard
                 Text(
                   event.message,
                   style: const TextStyle(
-                    color: AppColors
-                        .lightTextSecondary,
+                    color: AppColors.lightTextSecondary,
                     height: 1.45,
                   ),
                 ),
@@ -1101,11 +878,9 @@ class _AutomationEventCard
                   const Text(
                     'TEST EVENT',
                     style: TextStyle(
-                      color: AppColors
-                          .accentPurple,
+                      color: AppColors.accentPurple,
                       fontSize: 9,
-                      fontWeight:
-                      FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: 0.7,
                     ),
                   ),
@@ -1119,8 +894,7 @@ class _AutomationEventCard
   }
 }
 
-class _EmptyActivityCard
-    extends StatelessWidget {
+class _EmptyActivityCard extends StatelessWidget {
   const _EmptyActivityCard();
 
   @override
@@ -1128,10 +902,8 @@ class _EmptyActivityCard
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color:
-        Colors.white.withValues(alpha: 0.75),
-        borderRadius:
-        BorderRadius.circular(26),
+        color: Colors.white.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(26),
       ),
       child: const Row(
         children: [
@@ -1143,22 +915,17 @@ class _EmptyActivityCard
           SizedBox(width: 15),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-              CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'No automation activity yet',
-                  style: TextStyle(
-                    fontWeight:
-                    FontWeight.w800,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 SizedBox(height: 4),
                 Text(
                   'Activity will appear when a rule runs or when you test one.',
                   style: TextStyle(
-                    color: AppColors
-                        .lightTextSecondary,
+                    color: AppColors.lightTextSecondary,
                     height: 1.45,
                   ),
                 ),
@@ -1171,11 +938,69 @@ class _EmptyActivityCard
   }
 }
 
+class _SchedulesShortcut extends StatelessWidget {
+  const _SchedulesShortcut({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.8),
+      borderRadius: BorderRadius.circular(27),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(27),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppColors.accentPurple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: const Icon(
+                  Icons.schedule_rounded,
+                  color: AppColors.accentPurple,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Device schedules',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Create timed and repeating device actions.',
+                      style: TextStyle(
+                        color: AppColors.lightTextSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionHeader({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -1183,17 +1008,12 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-      CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(
-            fontWeight:
-            FontWeight.w800,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
           ),
         ),
@@ -1201,8 +1021,7 @@ class _SectionHeader extends StatelessWidget {
         Text(
           subtitle,
           style: const TextStyle(
-            color:
-            AppColors.lightTextSecondary,
+            color: AppColors.lightTextSecondary,
             height: 1.45,
           ),
         ),
@@ -1211,9 +1030,7 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-IconData _iconForRule(
-    AutomationRuleType type,
-    ) {
+IconData _iconForRule(AutomationRuleType type) {
   switch (type) {
     case AutomationRuleType.temperatureFan:
       return Icons.thermostat_rounded;
@@ -1232,9 +1049,7 @@ IconData _iconForRule(
   }
 }
 
-Color _accentForRule(
-    AutomationRuleType type,
-    ) {
+Color _accentForRule(AutomationRuleType type) {
   switch (type) {
     case AutomationRuleType.temperatureFan:
       return AppColors.temperature;
@@ -1253,9 +1068,7 @@ Color _accentForRule(
   }
 }
 
-Color _severityColor(
-    AutomationSeverity severity,
-    ) {
+Color _severityColor(AutomationSeverity severity) {
   switch (severity) {
     case AutomationSeverity.info:
       return AppColors.primaryDark;

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/async_status_card.dart';
 import '../../core/widgets/device_card.dart';
 import '../../core/widgets/sensor_card.dart';
 import '../../models/smart_device.dart';
@@ -67,6 +68,18 @@ class DashboardScreen extends StatelessWidget {
                       onAlertsTap: onAlertsTap,
                       onProfileTap: onProfileTap,
                     ),
+
+                    if (sensorProvider.isLoading ||
+                        sensorProvider.error != null) ...[
+                      const SizedBox(height: 18),
+                      AsyncStatusCard(
+                        isLoading: sensorProvider.isLoading,
+                        error: sensorProvider.error,
+                        loadingMessage: 'Loading live room data…',
+                        errorTitle: 'Live sensor data is unavailable',
+                        onRetry: sensorProvider.start,
+                      ),
+                    ],
 
                     const SizedBox(height: 26),
 

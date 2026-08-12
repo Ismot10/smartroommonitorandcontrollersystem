@@ -11,23 +11,43 @@ class AlertProvider extends ChangeNotifier {
   final AlertRepository? _repository;
   final List<AutomationEvent> _alerts = [];
   StreamSubscription<List<AutomationEvent>>? _subscription;
+  bool _hasLoaded = false;
+  String? _error;
 
   List<AutomationEvent> get alerts => List.unmodifiable(_alerts);
   int get unreadCount => _alerts.where((alert) => !alert.isRead).length;
+  bool get hasLoaded => _hasLoaded;
+  bool get isLoading => !_hasLoaded && _error == null;
+  String? get error => _error;
 
   Future<void> start() async {
     final repository = _repository;
     if (repository == null) {
+      _hasLoaded = true;
+      _error = null;
+      notifyListeners();
       return;
     }
 
+    _hasLoaded = false;
+    _error = null;
+    notifyListeners();
     await _subscription?.cancel();
-    _subscription = repository.watchAlerts().listen((alerts) {
-      _alerts
-        ..clear()
-        ..addAll(alerts);
-      notifyListeners();
-    });
+    _subscription = repository.watchAlerts().listen(
+      (alerts) {
+        _hasLoaded = true;
+        _error = null;
+        _alerts
+          ..clear()
+          ..addAll(alerts);
+        notifyListeners();
+      },
+      onError: (Object error) {
+        _hasLoaded = true;
+        _error = error.toString();
+        notifyListeners();
+      },
+    );
   }
 
   Future<void> add(AutomationEvent alert) async {

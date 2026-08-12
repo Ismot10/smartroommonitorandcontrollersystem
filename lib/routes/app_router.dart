@@ -10,14 +10,20 @@ import '../features/splash/splash_screen.dart';
 import '../core/constants/app_config.dart';
 import '../providers/automation_provider.dart';
 import '../providers/alert_provider.dart';
+import '../providers/connection_provider.dart';
 import '../providers/device_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/sensor_provider.dart';
+import '../providers/schedule_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/notification_coordinator.dart';
 import '../services/firebase_device_repository.dart';
+import '../services/firebase_connection_repository.dart';
 import '../services/firebase_alert_repository.dart';
 import '../services/firebase_automation_repository.dart';
 import '../services/firebase_history_repository.dart';
 import '../services/firebase_sensor_repository.dart';
+import '../services/firebase_schedule_repository.dart';
 import '../services/mock_history_repository.dart';
 import '../services/mock_sensor_repository.dart';
 import '../services/sensor_repository.dart';
@@ -75,6 +81,12 @@ final GoRouter appRouter = GoRouter(
 
         return MultiProvider(
           providers: [
+            ChangeNotifierProvider<ConnectionProvider>(
+              lazy: false,
+              create: (_) =>
+                  ConnectionProvider(repository: FirebaseConnectionRepository())
+                    ..start(),
+            ),
             ChangeNotifierProvider<SensorProvider>(
               create: (_) =>
                   SensorProvider(repository: sensorRepository)..start(),
@@ -92,6 +104,41 @@ final GoRouter appRouter = GoRouter(
                     ? null
                     : FirebaseAlertRepository(),
               )..start(),
+            ),
+            ChangeNotifierProxyProvider2<
+              DeviceProvider,
+              AlertProvider,
+              ScheduleProvider
+            >(
+              create: (_) =>
+                  ScheduleProvider(repository: FirebaseScheduleRepository())
+                    ..start(),
+              update: (_, devices, alerts, scheduleProvider) {
+                final provider =
+                    scheduleProvider ??
+                    (ScheduleProvider(repository: FirebaseScheduleRepository())
+                      ..start());
+                provider.updateDependencies(devices, alerts);
+                return provider;
+              },
+            ),
+            ChangeNotifierProxyProvider3<
+              AlertProvider,
+              SensorProvider,
+              SettingsProvider,
+              NotificationCoordinator
+            >(
+              lazy: false,
+              create: (_) => NotificationCoordinator(),
+              update: (_, alerts, sensors, settings, coordinator) {
+                final provider = coordinator ?? NotificationCoordinator();
+                provider.updateDependencies(
+                  alerts: alerts,
+                  sensors: sensors,
+                  settings: settings,
+                );
+                return provider;
+              },
             ),
           ],
           child:

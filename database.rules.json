@@ -2,6 +2,34 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['displayName', 'email', 'roomId', 'roomName', 'createdAt', 'updatedAt'])",
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 80"
+        },
+        "email": {
+          ".validate": "newData.isString()"
+        },
+        "roomId": {
+          ".validate": "newData.isString() && newData.val() == 'room_01'"
+        },
+        "roomName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "rooms": {
       "$roomId": {
         ".read": "auth != null",
@@ -83,6 +111,45 @@
               ".validate": "newData.isBoolean()"
             },
             "createdAt": {
+              ".validate": "newData.isNumber()"
+            }
+          }
+        },
+        "schedules": {
+          ".indexOn": ["enabled", "updatedAt"],
+          "$scheduleId": {
+            ".validate": "newData.hasChildren(['id', 'deviceId', 'deviceName', 'turnOn', 'hour', 'minute', 'weekdays', 'enabled', 'createdAt', 'updatedAt'])",
+            "id": {
+              ".validate": "newData.isString() && newData.val() == $scheduleId"
+            },
+            "deviceId": {
+              ".validate": "newData.isString()"
+            },
+            "deviceName": {
+              ".validate": "newData.isString()"
+            },
+            "turnOn": {
+              ".validate": "newData.isBoolean()"
+            },
+            "hour": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 23"
+            },
+            "minute": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 59"
+            },
+            "weekdays": {
+              ".validate": "newData.exists()"
+            },
+            "enabled": {
+              ".validate": "newData.isBoolean()"
+            },
+            "createdAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "lastExecutedAt": {
               ".validate": "newData.isNumber()"
             }
           }

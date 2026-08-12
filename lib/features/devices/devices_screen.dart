@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/async_status_card.dart';
 import '../../models/smart_device.dart';
 import '../../providers/device_provider.dart';
+import '../../providers/schedule_provider.dart';
 import 'device_detail_screen.dart';
 
 class DevicesScreen extends StatelessWidget {
@@ -41,6 +43,17 @@ class DevicesScreen extends StatelessWidget {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     const _DevicesHeader(),
+                    if (deviceProvider.isLoading ||
+                        deviceProvider.error != null) ...[
+                      const SizedBox(height: 18),
+                      AsyncStatusCard(
+                        isLoading: deviceProvider.isLoading,
+                        error: deviceProvider.error,
+                        loadingMessage: 'Loading your smart devices…',
+                        errorTitle: 'Devices could not be refreshed',
+                        onRetry: deviceProvider.start,
+                      ),
+                    ],
                     const SizedBox(height: 22),
                     _DevicesHero(
                       totalDevices: devices.length,
@@ -275,6 +288,7 @@ class _DeviceShowcaseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.read<DeviceProvider>();
+    final scheduleProvider = context.read<ScheduleProvider>();
     final accent = _deviceAccent(device.type);
     final icon = _deviceIcon(device.type);
 
@@ -285,8 +299,13 @@ class _DeviceShowcaseCard extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => ChangeNotifierProvider<DeviceProvider>.value(
-                value: provider,
+              builder: (_) => MultiProvider(
+                providers: [
+                  ChangeNotifierProvider<DeviceProvider>.value(value: provider),
+                  ChangeNotifierProvider<ScheduleProvider>.value(
+                    value: scheduleProvider,
+                  ),
+                ],
                 child: DeviceDetailScreen(deviceId: device.id),
               ),
             ),
