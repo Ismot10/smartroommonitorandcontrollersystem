@@ -16,6 +16,7 @@ import '../providers/history_provider.dart';
 import '../providers/sensor_provider.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/system_status_provider.dart';
 import '../providers/notification_coordinator.dart';
 import '../services/firebase_device_repository.dart';
 import '../services/firebase_connection_repository.dart';
@@ -24,6 +25,7 @@ import '../services/firebase_automation_repository.dart';
 import '../services/firebase_history_repository.dart';
 import '../services/firebase_sensor_repository.dart';
 import '../services/firebase_schedule_repository.dart';
+import '../services/firebase_system_status_repository.dart';
 import '../services/mock_history_repository.dart';
 import '../services/mock_sensor_repository.dart';
 import '../services/sensor_repository.dart';
@@ -90,6 +92,12 @@ final GoRouter appRouter = GoRouter(
             ChangeNotifierProvider<SensorProvider>(
               create: (_) =>
                   SensorProvider(repository: sensorRepository)..start(),
+            ),
+            ChangeNotifierProvider<SystemStatusProvider>(
+              lazy: false,
+              create: (_) => SystemStatusProvider(
+                repository: FirebaseSystemStatusRepository(),
+              )..start(),
             ),
             ChangeNotifierProvider<DeviceProvider>(
               create: (_) => DeviceProvider(

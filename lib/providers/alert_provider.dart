@@ -51,6 +51,8 @@ class AlertProvider extends ChangeNotifier {
   }
 
   Future<void> add(AutomationEvent alert) async {
+    if (_isDuplicate(alert)) return;
+
     final repository = _repository;
     if (repository == null) {
       _upsert(alert);
@@ -59,6 +61,16 @@ class AlertProvider extends ChangeNotifier {
 
     final persisted = await repository.addAlert(alert);
     _upsert(persisted);
+  }
+
+  bool _isDuplicate(AutomationEvent candidate) {
+    if (candidate.ruleId == 'schedule' || candidate.isTest) return false;
+
+    return _alerts.any((existing) {
+      if (existing.ruleId != candidate.ruleId || existing.isTest) return false;
+      final difference = candidate.createdAt.difference(existing.createdAt);
+      return !difference.isNegative && difference <= const Duration(minutes: 5);
+    });
   }
 
   Future<void> setRead(String id, bool isRead) async {

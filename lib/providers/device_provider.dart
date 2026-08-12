@@ -8,13 +8,9 @@ import '../services/mock_data_service.dart';
 
 class DeviceProvider extends ChangeNotifier {
   DeviceProvider({DeviceRepository? repository})
-      : _repository = repository,
-        _defaultDevices = List<SmartDevice>.from(
-          MockDataService().devices,
-        ),
-        _devices = List<SmartDevice>.from(
-          MockDataService().devices,
-        );
+    : _repository = repository,
+      _defaultDevices = List<SmartDevice>.from(MockDataService().devices),
+      _devices = List<SmartDevice>.from(MockDataService().devices);
 
   final DeviceRepository? _repository;
 
@@ -40,8 +36,7 @@ class DeviceProvider extends ChangeNotifier {
   // GETTERS
   // ============================================================
 
-  List<SmartDevice> get devices =>
-      List<SmartDevice>.unmodifiable(_devices);
+  List<SmartDevice> get devices => List<SmartDevice>.unmodifiable(_devices);
 
   bool get isLoading => _isLoading;
 
@@ -75,9 +70,7 @@ class DeviceProvider extends ChangeNotifier {
     try {
       // This still handles the case where /devices is completely
       // empty.
-      await repository.seedDevicesIfEmpty(
-        _defaultDevices,
-      );
+      await repository.seedDevicesIfEmpty(_defaultDevices);
 
       await _subscription?.cancel();
 
@@ -100,15 +93,12 @@ class DeviceProvider extends ChangeNotifier {
   // FIREBASE SNAPSHOT HANDLING
   // ============================================================
 
-  void _handleIncomingDevices(
-      List<SmartDevice> incoming,
-      ) {
+  void _handleIncomingDevices(List<SmartDevice> incoming) {
     _isLoading = false;
     _error = null;
 
     final incomingById = <String, SmartDevice>{
-      for (final device in incoming)
-        device.id: device,
+      for (final device in incoming) device.id: device,
     };
 
     final mergedDevices = <SmartDevice>[];
@@ -121,26 +111,21 @@ class DeviceProvider extends ChangeNotifier {
     // ----------------------------------------------------------
 
     for (final defaultDevice in _defaultDevices) {
-      final remoteDevice =
-      incomingById[defaultDevice.id];
+      final remoteDevice = incomingById[defaultDevice.id];
 
       if (remoteDevice != null) {
         mergedDevices.add(remoteDevice);
 
         // Firebase now contains it, so remove any previous
         // pending seed marker.
-        _missingSeedRequests.remove(
-          defaultDevice.id,
-        );
+        _missingSeedRequests.remove(defaultDevice.id);
       } else {
         mergedDevices.add(defaultDevice);
 
         // Firebase is missing this specific device.
         // Seed only this device — do NOT overwrite existing
         // device states.
-        _requestMissingDeviceSeed(
-          defaultDevice,
-        );
+        _requestMissingDeviceSeed(defaultDevice);
       }
     }
 
@@ -150,8 +135,7 @@ class DeviceProvider extends ChangeNotifier {
 
     for (final remoteDevice in incoming) {
       final alreadyIncluded = mergedDevices.any(
-            (device) =>
-        device.id == remoteDevice.id,
+        (device) => device.id == remoteDevice.id,
       );
 
       if (!alreadyIncluded) {
@@ -170,9 +154,7 @@ class DeviceProvider extends ChangeNotifier {
   // SEED ONE MISSING DEVICE
   // ============================================================
 
-  void _requestMissingDeviceSeed(
-      SmartDevice device,
-      ) {
+  void _requestMissingDeviceSeed(SmartDevice device) {
     final repository = _repository;
 
     if (repository == null) {
@@ -184,33 +166,22 @@ class DeviceProvider extends ChangeNotifier {
       return;
     }
 
-    unawaited(
-      _seedMissingDevice(
-        repository,
-        device,
-      ),
-    );
+    unawaited(_seedMissingDevice(repository, device));
   }
 
   Future<void> _seedMissingDevice(
-      DeviceRepository repository,
-      SmartDevice device,
-      ) async {
+    DeviceRepository repository,
+    SmartDevice device,
+  ) async {
     try {
       await repository.saveDevice(device);
 
-      debugPrint(
-        '[DeviceProvider] Seeded missing device: ${device.id}',
-      );
+      debugPrint('[DeviceProvider] Seeded missing device: ${device.id}');
     } catch (error) {
       // Allow another snapshot to retry later.
-      _missingSeedRequests.remove(
-        device.id,
-      );
+      _missingSeedRequests.remove(device.id);
 
-      debugPrint(
-        '[DeviceProvider] Failed to seed ${device.id}: $error',
-      );
+      debugPrint('[DeviceProvider] Failed to seed ${device.id}: $error');
     }
   }
 
@@ -233,9 +204,7 @@ class DeviceProvider extends ChangeNotifier {
   // ============================================================
 
   void toggle(String id) {
-    final index = _devices.indexWhere(
-          (device) => device.id == id,
-    );
+    final index = _devices.indexWhere((device) => device.id == id);
 
     if (index == -1) {
       return;
@@ -243,30 +212,21 @@ class DeviceProvider extends ChangeNotifier {
 
     final current = _devices[index];
 
-    _devices[index] = current.copyWith(
-      isOn: !current.isOn,
-    );
+    _devices[index] = current.copyWith(isOn: !current.isOn);
 
     _save(_devices[index]);
 
     notifyListeners();
   }
 
-  void setPower(
-      String id,
-      bool isOn,
-      ) {
-    final index = _devices.indexWhere(
-          (device) => device.id == id,
-    );
+  void setPower(String id, bool isOn) {
+    final index = _devices.indexWhere((device) => device.id == id);
 
     if (index == -1) {
       return;
     }
 
-    _devices[index] = _devices[index].copyWith(
-      isOn: isOn,
-    );
+    _devices[index] = _devices[index].copyWith(isOn: isOn);
 
     _save(_devices[index]);
 
@@ -277,23 +237,15 @@ class DeviceProvider extends ChangeNotifier {
   // BRIGHTNESS
   // ============================================================
 
-  void setBrightness(
-      String id,
-      int brightness,
-      ) {
-    final index = _devices.indexWhere(
-          (device) => device.id == id,
-    );
+  void setBrightness(String id, int brightness) {
+    final index = _devices.indexWhere((device) => device.id == id);
 
     if (index == -1) {
       return;
     }
 
     _devices[index] = _devices[index].copyWith(
-      brightness: brightness.clamp(
-        0,
-        100,
-      ),
+      brightness: brightness.clamp(0, 100),
     );
 
     _save(_devices[index]);
@@ -305,21 +257,14 @@ class DeviceProvider extends ChangeNotifier {
   // RGB COLOR
   // ============================================================
 
-  void setRgbColor(
-      String id,
-      int rgbColor,
-      ) {
-    final index = _devices.indexWhere(
-          (device) => device.id == id,
-    );
+  void setRgbColor(String id, int rgbColor) {
+    final index = _devices.indexWhere((device) => device.id == id);
 
     if (index == -1) {
       return;
     }
 
-    _devices[index] = _devices[index].copyWith(
-      rgbColor: rgbColor,
-    );
+    _devices[index] = _devices[index].copyWith(rgbColor: rgbColor);
 
     _save(_devices[index]);
 
@@ -330,13 +275,8 @@ class DeviceProvider extends ChangeNotifier {
   // CURTAIN
   // ============================================================
 
-  void setCurtainPosition(
-      CurtainPosition position,
-      ) {
-    final index = _devices.indexWhere(
-          (device) =>
-      device.id == 'curtain',
-    );
+  void setCurtainPosition(CurtainPosition position) {
+    final index = _devices.indexWhere((device) => device.id == 'curtain');
 
     if (index == -1) {
       return;
@@ -356,13 +296,8 @@ class DeviceProvider extends ChangeNotifier {
   // DOOR DIGITAL TWIN
   // ============================================================
 
-  void setDoorLockState(
-      DoorLockState state,
-      ) {
-    final index = _devices.indexWhere(
-          (device) =>
-      device.id == 'doorLock',
-    );
+  void setDoorLockState(DoorLockState state) {
+    final index = _devices.indexWhere((device) => device.id == 'doorLock');
 
     if (index == -1) {
       return;
@@ -380,22 +315,52 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> applyScheduledState({
+    required String deviceId,
+    required bool turnOn,
+    int? level,
+  }) async {
+    final index = _devices.indexWhere((device) => device.id == deviceId);
+    if (index == -1) return false;
+
+    final current = _devices[index];
+    final updated = switch (current.type) {
+      DeviceType.curtain => current.copyWith(
+        curtainPosition: turnOn ? CurtainPosition.open : CurtainPosition.closed,
+        isOn: true,
+      ),
+      DeviceType.doorLock => current.copyWith(
+        doorLockState: turnOn ? DoorLockState.locked : DoorLockState.unlocked,
+        isOn: turnOn,
+      ),
+      _ => current.copyWith(
+        isOn: turnOn,
+        brightness: turnOn && level != null
+            ? level.clamp(0, 100)
+            : current.brightness,
+      ),
+    };
+
+    _devices[index] = updated;
+    notifyListeners();
+
+    final repository = _repository;
+    if (repository != null) await repository.saveDevice(updated);
+    return true;
+  }
+
   // ============================================================
   // SAVE
   // ============================================================
 
-  void _save(
-      SmartDevice device,
-      ) {
+  void _save(SmartDevice device) {
     final repository = _repository;
 
     if (repository == null) {
       return;
     }
 
-    unawaited(
-      repository.saveDevice(device),
-    );
+    unawaited(repository.saveDevice(device));
   }
 
   // ============================================================

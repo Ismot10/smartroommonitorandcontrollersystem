@@ -6,9 +6,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/widgets/async_status_card.dart';
 import '../../models/automation_rule.dart';
 import '../../providers/alert_provider.dart';
-import '../../providers/automation_provider.dart';
 
-enum AlertFilter { all, unread, critical, warning, information }
+enum AlertFilter { all, unread, critical, automation }
 
 enum _AlertMenuAction { markRead, markUnread, dismiss }
 
@@ -38,14 +37,16 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final unreadCriticalCount = availableEvents
         .where(
           (event) =>
-              !_isRead(event) && event.severity == AutomationSeverity.critical,
+              !_isRead(event) &&
+              event.displaySeverity == AutomationSeverity.critical,
         )
         .length;
 
     final unreadWarningCount = availableEvents
         .where(
           (event) =>
-              !_isRead(event) && event.severity == AutomationSeverity.warning,
+              !_isRead(event) &&
+              event.displaySeverity == AutomationSeverity.warning,
         )
         .length;
 
@@ -183,18 +184,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
       case AlertFilter.critical:
         return events
-            .where((event) => event.severity == AutomationSeverity.critical)
+            .where(
+              (event) => event.displaySeverity == AutomationSeverity.critical,
+            )
             .toList();
 
-      case AlertFilter.warning:
-        return events
-            .where((event) => event.severity == AutomationSeverity.warning)
-            .toList();
-
-      case AlertFilter.information:
-        return events
-            .where((event) => event.severity == AutomationSeverity.info)
-            .toList();
+      case AlertFilter.automation:
+        return events.where((event) => event.isAutomationCategory).toList();
     }
   }
 
@@ -312,22 +308,40 @@ class _AlertsScreenState extends State<AlertsScreen> {
         break;
 
       case _AlertMenuAction.dismiss:
-        context.read<AlertProvider>().delete(event.id);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Alert dismissed.'),
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'Undo',
-              onPressed: () {
-                context.read<AlertProvider>().restore(event);
-              },
-            ),
-          ),
-        );
+        _confirmDeleteAlert(event);
         break;
     }
+  }
+
+  Future<void> _confirmDeleteAlert(AutomationEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete alert?'),
+        content: Text('${event.displayTitle} will be removed from Firebase.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await context.read<AlertProvider>().delete(event.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Alert deleted.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _openAlertDetails(
@@ -335,9 +349,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     AutomationEvent event,
   ) async {
     final alertProvider = context.read<AlertProvider>();
-    final automationProvider = context.read<AutomationProvider>();
-    final rule = automationProvider.byId(event.ruleId);
-
     await alertProvider.setRead(event.id, true);
 
     if (!context.mounted) {
@@ -353,7 +364,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(34)),
       ),
       builder: (sheetContext) {
-        return _AlertDetailSheet(event: event, rule: rule);
+        return _AlertDetailSheet(event: event);
       },
     );
   }
@@ -666,8 +677,7 @@ class _AlertFilterBar extends StatelessWidget {
       AlertFilter.all,
       AlertFilter.unread,
       AlertFilter.critical,
-      AlertFilter.warning,
-      AlertFilter.information,
+      AlertFilter.automation,
     ];
 
     return SingleChildScrollView(
@@ -723,11 +733,8 @@ class _AlertFilterBar extends StatelessWidget {
       case AlertFilter.critical:
         return 'Critical';
 
-      case AlertFilter.warning:
-        return 'Warning';
-
-      case AlertFilter.information:
-        return 'Information';
+      case AlertFilter.automation:
+        return 'Automation';
     }
   }
 
@@ -742,11 +749,8 @@ class _AlertFilterBar extends StatelessWidget {
       case AlertFilter.critical:
         return Icons.warning_rounded;
 
-      case AlertFilter.warning:
-        return Icons.error_outline_rounded;
-
-      case AlertFilter.information:
-        return Icons.info_outline_rounded;
+      case AlertFilter.automation:
+        return Icons.auto_awesome_rounded;
     }
   }
 
@@ -759,11 +763,8 @@ class _AlertFilterBar extends StatelessWidget {
       case AlertFilter.critical:
         return AppColors.danger;
 
-      case AlertFilter.warning:
-        return AppColors.warning;
-
-      case AlertFilter.information:
-        return AppColors.accentBlue;
+      case AlertFilter.automation:
+        return AppColors.accentPurple;
     }
   }
 }
@@ -783,7 +784,7 @@ class _AlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = _severityColor(event.severity);
+    final accent = _severityColor(event.displaySeverity);
 
     return Material(
       color: Colors.transparent,
@@ -844,7 +845,7 @@ class _AlertCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Text(
-                            _severityLabel(event.severity),
+                            _severityLabel(event.displaySeverity),
                             style: TextStyle(
                               color: accent,
                               fontSize: 9,
@@ -937,7 +938,7 @@ class _AlertCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            event.title,
+                            event.displayTitle,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   fontWeight: isRead
@@ -981,7 +982,7 @@ class _AlertCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          _categoryLabel(event.ruleId),
+                          event.category,
                           style: const TextStyle(
                             color: AppColors.lightTextSecondary,
                             fontSize: 11,
@@ -1017,14 +1018,13 @@ class _AlertCard extends StatelessWidget {
 }
 
 class _AlertDetailSheet extends StatelessWidget {
-  const _AlertDetailSheet({required this.event, required this.rule});
+  const _AlertDetailSheet({required this.event});
 
   final AutomationEvent event;
-  final AutomationRule? rule;
 
   @override
   Widget build(BuildContext context) {
-    final accent = _severityColor(event.severity);
+    final accent = _severityColor(event.displaySeverity);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -1049,7 +1049,7 @@ class _AlertDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _severityLabel(event.severity),
+                        _severityLabel(event.displaySeverity),
                         style: TextStyle(
                           color: accent,
                           fontSize: 11,
@@ -1059,7 +1059,7 @@ class _AlertDetailSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        event.title,
+                        event.displayTitle,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -1085,7 +1085,7 @@ class _AlertDetailSheet extends StatelessWidget {
             _DetailInformationCard(
               icon: _categoryIcon(event.ruleId),
               title: 'Category',
-              value: _categoryLabel(event.ruleId),
+              value: event.category,
             ),
 
             const SizedBox(height: 11),
@@ -1093,7 +1093,7 @@ class _AlertDetailSheet extends StatelessWidget {
             _DetailInformationCard(
               icon: Icons.sensors_rounded,
               title: 'Trigger',
-              value: rule?.description ?? 'Automation activity detected.',
+              value: event.triggerDescription,
             ),
 
             const SizedBox(height: 25),
@@ -1131,10 +1131,10 @@ class _AlertDetailSheet extends StatelessWidget {
 
             const SizedBox(height: 11),
 
-            if (rule == null || rule!.actions.isEmpty)
+            if (event.automaticActions.isEmpty)
               const _NoActionsCard()
             else
-              ...rule!.actions.map(
+              ...event.automaticActions.map(
                 (action) => Padding(
                   padding: const EdgeInsets.only(bottom: 9),
                   child: _AutomaticActionRow(action: action),
@@ -1401,7 +1401,11 @@ class _EmptyAlertsCard extends StatelessWidget {
           ),
           const SizedBox(height: 19),
           Text(
-            isFilteredEmpty ? 'No matching alerts' : 'No alerts yet',
+            filter == AlertFilter.unread && isFilteredEmpty
+                ? 'No unread alerts'
+                : isFilteredEmpty
+                ? 'No matching alerts'
+                : 'No alerts yet',
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -1409,11 +1413,10 @@ class _EmptyAlertsCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             isFilteredEmpty
-                ? 'Try another filter to review '
-                      'your automation activity.'
-                : 'Open Automation and press Test '
-                      'on any rule. Its event will '
-                      'appear here immediately.',
+                ? filter == AlertFilter.unread
+                      ? "You're all caught up."
+                      : 'Try another filter to review your room activity.'
+                : 'Your room is operating normally.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppColors.lightTextSecondary,
@@ -1506,28 +1509,6 @@ IconData _eventIcon(AutomationEvent event) {
 
     default:
       return Icons.notifications_rounded;
-  }
-}
-
-String _categoryLabel(String ruleId) {
-  switch (ruleId) {
-    case 'temperatureFan':
-      return 'Climate';
-
-    case 'lowLight':
-      return 'Lighting';
-
-    case 'motionSecurity':
-      return 'Security';
-
-    case 'rainCurtain':
-      return 'Weather';
-
-    case 'gasEmergency':
-      return 'Emergency';
-
-    default:
-      return 'System';
   }
 }
 

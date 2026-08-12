@@ -142,6 +142,80 @@ class AutomationEvent {
   final bool isTest;
   final bool isRead;
 
+  AutomationSeverity get displaySeverity => switch (ruleId) {
+    'gasEmergency' => AutomationSeverity.critical,
+    'temperatureFan' || 'rainCurtain' => AutomationSeverity.warning,
+    'motionSecurity' || 'lowLight' || 'schedule' => AutomationSeverity.info,
+    _ => severity,
+  };
+
+  String get displayTitle => switch (ruleId) {
+    'gasEmergency' => 'Gas Emergency Detected',
+    'temperatureFan' => 'High Temperature Detected',
+    'motionSecurity' => 'Motion Detected',
+    'lowLight' => 'Low-Light Automation Activated',
+    'rainCurtain' => 'Rain Detected — Curtain Closed',
+    'schedule' => 'Scheduled Action Completed',
+    'system' => title.isEmpty ? 'System Event' : title,
+    _ => title.isEmpty ? 'Smart Room Alert' : title,
+  };
+
+  String get category => switch (ruleId) {
+    'gasEmergency' => 'Safety',
+    'temperatureFan' || 'rainCurtain' => 'Environment',
+    'motionSecurity' => 'Security',
+    'lowLight' => 'Automation',
+    'schedule' => 'Schedule',
+    _ => 'System',
+  };
+
+  bool get isAutomationCategory => switch (ruleId) {
+    'temperatureFan' ||
+    'lowLight' ||
+    'motionSecurity' ||
+    'rainCurtain' ||
+    'gasEmergency' => true,
+    _ => false,
+  };
+
+  String get triggerDescription => switch (ruleId) {
+    'gasEmergency' => 'Gas sensor detected an unsafe condition.',
+    'temperatureFan' => 'Room temperature crossed the configured limit.',
+    'motionSecurity' => 'The motion sensor detected room activity.',
+    'lowLight' => 'Room light level fell below the configured threshold.',
+    'rainCurtain' => 'The rain sensor detected rainfall.',
+    'schedule' => 'A scheduled device action reached its configured time.',
+    _ => 'Aurora reported a smart-room system event.',
+  };
+
+  List<String> get automaticActions => switch (ruleId) {
+    'gasEmergency' => const [
+      'Safety Alarm activated',
+      'Aurora Light activated',
+      'Room Light activated',
+      'Door Lock unlocked',
+    ],
+    'temperatureFan' => const ['Climate Fan activated'],
+    'motionSecurity' => const ['Room Light activated', 'Door Lock secured'],
+    'lowLight' => const ['Room Light activated'],
+    'rainCurtain' => const ['Smart Curtain closed'],
+    'schedule' => _scheduleActions(message),
+    _ => const [],
+  };
+
+  static List<String> _scheduleActions(String message) {
+    final normalized = message.trim();
+    if (normalized.isEmpty) return const ['Scheduled action completed'];
+
+    final separator = normalized.indexOf(':');
+    var action = separator >= 0
+        ? normalized.substring(separator + 1).trim()
+        : normalized;
+    if (action.endsWith('.')) action = action.substring(0, action.length - 1);
+    if (action.isEmpty) return const ['Scheduled action completed'];
+    return ['$action successfully'];
+  }
+
   AutomationEvent copyWith({String? id, bool? isRead}) {
     return AutomationEvent(
       id: id ?? this.id,

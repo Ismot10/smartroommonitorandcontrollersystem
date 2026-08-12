@@ -118,9 +118,12 @@
         "schedules": {
           ".indexOn": ["enabled", "updatedAt"],
           "$scheduleId": {
-            ".validate": "newData.hasChildren(['id', 'deviceId', 'deviceName', 'turnOn', 'hour', 'minute', 'weekdays', 'enabled', 'createdAt', 'updatedAt'])",
+            ".validate": "newData.hasChildren(['id', 'name', 'deviceId', 'deviceName', 'turnOn', 'action', 'hour', 'minute', 'weekdays', 'enabled', 'createdAt', 'updatedAt'])",
             "id": {
               ".validate": "newData.isString() && newData.val() == $scheduleId"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
             },
             "deviceId": {
               ".validate": "newData.isString()"
@@ -130,6 +133,12 @@
             },
             "turnOn": {
               ".validate": "newData.isBoolean()"
+            },
+            "action": {
+              ".validate": "newData.val() == 'on' || newData.val() == 'off' || newData.val() == 'open' || newData.val() == 'closed' || newData.val() == 'locked' || newData.val() == 'unlocked'"
+            },
+            "level": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
             },
             "hour": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 23"

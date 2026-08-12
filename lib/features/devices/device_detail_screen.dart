@@ -6,6 +6,7 @@ import '../../models/smart_device.dart';
 import '../../providers/device_provider.dart';
 import '../../providers/schedule_provider.dart';
 import '../schedules/schedules_screen.dart';
+import 'curtain_live_demo_screen.dart';
 
 class DeviceDetailScreen extends StatelessWidget {
   const DeviceDetailScreen({required this.deviceId, super.key});
@@ -316,6 +317,28 @@ class DeviceDetailScreen extends StatelessWidget {
               description:
                   'This curtain can later respond automatically to rain or lighting conditions.',
             ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const CurtainLiveDemoScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.play_circle_outline_rounded),
+                label: const Text('Open Curtain Live Demo'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primaryDark,
+                  padding: const EdgeInsets.symmetric(vertical: 17),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
           ],
         );
 
@@ -518,7 +541,7 @@ class DeviceDetailScreen extends StatelessWidget {
   }
 }
 
-class _DeviceHero extends StatelessWidget {
+class _DeviceHero extends StatefulWidget {
   const _DeviceHero({
     required this.device,
     required this.icon,
@@ -528,6 +551,55 @@ class _DeviceHero extends StatelessWidget {
   final SmartDevice device;
   final IconData icon;
   final Color accentColor;
+
+  @override
+  State<_DeviceHero> createState() => _DeviceHeroState();
+}
+
+class _DeviceHeroState extends State<_DeviceHero>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fanController;
+
+  SmartDevice get device => widget.device;
+  IconData get icon => widget.icon;
+  Color get accentColor => widget.accentColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _fanController = AnimationController(vsync: this, duration: _fanDuration);
+    _syncFanAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeviceHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.device.isOn != device.isOn ||
+        oldWidget.device.brightness != device.brightness ||
+        oldWidget.device.type != device.type) {
+      _fanController.duration = _fanDuration;
+      _syncFanAnimation();
+    }
+  }
+
+  Duration get _fanDuration {
+    final speed = device.brightness.clamp(1, 100);
+    return Duration(milliseconds: 1900 - (speed * 13));
+  }
+
+  void _syncFanAnimation() {
+    if (device.type == DeviceType.fan && device.isOn) {
+      _fanController.repeat();
+    } else {
+      _fanController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _fanController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -600,7 +672,11 @@ class _DeviceHero extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.16),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
               ),
-              child: Icon(icon, size: 86, color: Colors.white),
+              child: _AnimatedDeviceIllustration(
+                device: device,
+                fallbackIcon: icon,
+                fanAnimation: _fanController,
+              ),
             ),
           ),
           Positioned(
@@ -681,6 +757,128 @@ class _DeviceHero extends StatelessWidget {
             : 'Door is unlocked';
     }
   }
+}
+
+class _AnimatedDeviceIllustration extends StatelessWidget {
+  const _AnimatedDeviceIllustration({
+    required this.device,
+    required this.fallbackIcon,
+    required this.fanAnimation,
+  });
+
+  final SmartDevice device;
+  final IconData fallbackIcon;
+  final Animation<double> fanAnimation;
+
+  @override
+  Widget build(BuildContext context) {
+    if (device.type == DeviceType.fan) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 350),
+            opacity: device.isOn ? 0.24 : 0.08,
+            child: Container(
+              width: 124,
+              height: 124,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: device.isOn
+                    ? [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          blurRadius: 24,
+                          spreadRadius: 6,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+          RotationTransition(
+            turns: fanAnimation,
+            child: const SizedBox(
+              key: ValueKey('fan-illustration'),
+              width: 100,
+              height: 100,
+              child: CustomPaint(painter: _FanBladePainter()),
+            ),
+          ),
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (device.type == DeviceType.doorLock) {
+      final locked = device.doorLockState == DoorLockState.locked;
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 420),
+        switchInCurve: Curves.easeOutBack,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: animation, child: child),
+        ),
+        child: Icon(
+          locked ? Icons.lock_rounded : Icons.lock_open_rounded,
+          key: ValueKey(locked),
+          size: 92,
+          color: Colors.white,
+        ),
+      );
+    }
+
+    return Icon(fallbackIcon, size: 86, color: Colors.white);
+  }
+}
+
+class _FanBladePainter extends CustomPainter {
+  const _FanBladePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final bladePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    for (var index = 0; index < 4; index++) {
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(index * 1.5707963267948966);
+
+      final blade = Path()
+        ..moveTo(5, -7)
+        ..cubicTo(19, -31, 33, -43, 42, -38)
+        ..cubicTo(50, -32, 42, -12, 11, 5)
+        ..cubicTo(8, 5, 6, 1, 5, -7)
+        ..close();
+
+      canvas.drawPath(blade, bladePaint);
+      canvas.restore();
+    }
+
+    canvas.drawCircle(center, 11, bladePaint);
+    canvas.drawCircle(center, 4, Paint()..color = const Color(0xFF5A97D9));
+  }
+
+  @override
+  bool shouldRepaint(covariant _FanBladePainter oldDelegate) => false;
 }
 
 class _ControlSheet extends StatelessWidget {

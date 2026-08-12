@@ -7,24 +7,45 @@ import '../../core/widgets/async_status_card.dart';
 import '../../core/widgets/device_card.dart';
 import '../../core/widgets/sensor_card.dart';
 import '../../models/smart_device.dart';
+import '../../models/automation_rule.dart';
+import '../../models/device_schedule.dart';
 import '../../providers/automation_provider.dart';
 import '../../providers/alert_provider.dart';
 import '../../providers/device_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../providers/sensor_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/system_status_provider.dart';
+import '../../providers/schedule_provider.dart';
+import '../devices/device_detail_screen.dart';
 import '../history/history_screen.dart';
+import '../schedules/schedules_screen.dart';
+
+String _repeatLabel(List<int> weekdays) {
+  if (weekdays.isEmpty) return 'Once';
+  if (weekdays.length == 7) return 'Every day';
+  if (weekdays.length == 5 && const [1, 2, 3, 4, 5].every(weekdays.contains)) {
+    return 'Weekdays';
+  }
+  if (weekdays.length == 2 && const [6, 7].every(weekdays.contains)) {
+    return 'Weekends';
+  }
+  const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return weekdays.map((day) => names[day - 1]).join(', ');
+}
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     required this.onDevicesTap,
     required this.onAlertsTap,
+    required this.onAutomationTap,
     required this.onProfileTap,
     super.key,
   });
 
   final VoidCallback onDevicesTap;
   final VoidCallback onAlertsTap;
+  final VoidCallback onAutomationTap;
   final VoidCallback onProfileTap;
 
   @override
@@ -34,6 +55,9 @@ class DashboardScreen extends StatelessWidget {
     final deviceProvider = context.watch<DeviceProvider>();
     final settingsProvider = context.watch<SettingsProvider>();
     final alertProvider = context.watch<AlertProvider>();
+    final systemStatus = context.watch<SystemStatusProvider>();
+    final automationProvider = context.watch<AutomationProvider>();
+    final scheduleProvider = context.watch<ScheduleProvider>();
 
     final sensors = sensorProvider.data;
     final devices = deviceProvider.devices;
@@ -65,6 +89,8 @@ class DashboardScreen extends StatelessWidget {
                       roomName: settingsProvider.roomName,
                       displayName: settingsProvider.displayName,
                       unreadAlertCount: alertProvider.unreadCount,
+                      systemOnline: systemStatus.isOnline,
+                      lastSeenLabel: systemStatus.lastSeenLabel,
                       onAlertsTap: onAlertsTap,
                       onProfileTap: onProfileTap,
                     ),
@@ -87,6 +113,11 @@ class DashboardScreen extends StatelessWidget {
                       temperature: sensors.temperature,
                       humidity: sensors.humidity,
                       updatedAt: sensors.updatedAt,
+                      roomStatus: sensorProvider.roomStatus,
+                      gasDetected: sensors.gas >= 450,
+                      raining: sensors.raining,
+                      motionDetected: sensors.motionDetected,
+                      isDark: sensors.lightLevel <= 100,
                     ),
 
                     const SizedBox(height: 28),
@@ -109,6 +140,15 @@ class DashboardScreen extends StatelessWidget {
                       crossAxisSpacing: 13,
                       childAspectRatio: 1.03,
                       children: [
+                        SensorCard(
+                          title: 'Temperature',
+                          value: '${sensors.temperature.toStringAsFixed(1)}°C',
+                          subtitle: _temperatureDescription(
+                            sensors.temperature,
+                          ),
+                          icon: Icons.thermostat_rounded,
+                          accentColor: AppColors.temperature,
+                        ),
                         SensorCard(
                           title: 'Humidity',
                           value: '${sensors.humidity.toStringAsFixed(1)}%',
@@ -156,14 +196,6 @@ class DashboardScreen extends StatelessWidget {
                           icon: Icons.wb_sunny_rounded,
                           accentColor: AppColors.light,
                         ),
-
-                        const SensorCard(
-                          title: 'System',
-                          value: 'Online',
-                          subtitle: 'ESP32 data gateway',
-                          icon: Icons.wifi_rounded,
-                          accentColor: AppColors.safe,
-                        ),
                       ],
                     ),
 
@@ -178,7 +210,7 @@ class DashboardScreen extends StatelessWidget {
                     const SizedBox(height: 15),
 
                     GridView.builder(
-                      itemCount: devices.length >= 4 ? 4 : devices.length,
+                      itemCount: devices.length,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
@@ -197,8 +229,28 @@ class DashboardScreen extends StatelessWidget {
                           onToggle: () {
                             deviceProvider.toggle(device.id);
                           },
+                          onOpen: () => _openDeviceDetail(context, device.id),
                         );
                       },
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    _DashboardOverviewGrid(
+                      automation: automationProvider,
+                      schedule: scheduleProvider.upcoming,
+                      alerts: alertProvider.alerts,
+                      unreadCount: alertProvider.unreadCount,
+                      onAutomationTap: onAutomationTap,
+                      onSchedulesTap: () => _openSchedulesScreen(context),
+                      onAlertsTap: onAlertsTap,
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    _RecentActivitySection(
+                      events: alertProvider.alerts.take(3).toList(),
+                      onViewAll: () => _openHistoryScreen(context),
                     ),
                   ]),
                 ),
@@ -251,6 +303,38 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  static void _openDeviceDetail(BuildContext context, String deviceId) {
+    final devices = context.read<DeviceProvider>();
+    final schedules = context.read<ScheduleProvider>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<DeviceProvider>.value(value: devices),
+            ChangeNotifierProvider<ScheduleProvider>.value(value: schedules),
+          ],
+          child: DeviceDetailScreen(deviceId: deviceId),
+        ),
+      ),
+    );
+  }
+
+  static void _openSchedulesScreen(BuildContext context) {
+    final devices = context.read<DeviceProvider>();
+    final schedules = context.read<ScheduleProvider>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<DeviceProvider>.value(value: devices),
+            ChangeNotifierProvider<ScheduleProvider>.value(value: schedules),
+          ],
+          child: const SchedulesScreen(),
+        ),
+      ),
+    );
+  }
+
   static String _humidityDescription(double humidity) {
     if (humidity < 30) {
       return 'Air is dry';
@@ -261,6 +345,12 @@ class DashboardScreen extends StatelessWidget {
     }
 
     return 'High humidity';
+  }
+
+  static String _temperatureDescription(double temperature) {
+    if (temperature >= 30) return 'Warm room';
+    if (temperature <= 20) return 'Cool room';
+    return 'Comfortable';
   }
 
   static String _lightDescription(double lux) {
@@ -287,12 +377,173 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
+class _AnimatedSystemCard extends StatefulWidget {
+  const _AnimatedSystemCard({
+    required this.online,
+    required this.lastSeenLabel,
+    required this.hasError,
+  });
+
+  final bool? online;
+  final String lastSeenLabel;
+  final bool hasError;
+
+  @override
+  State<_AnimatedSystemCard> createState() => _AnimatedSystemCardState();
+}
+
+class _AnimatedSystemCardState extends State<_AnimatedSystemCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedSystemCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.online != widget.online) _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.online == true) {
+      _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final online = widget.online;
+    final color = online == true
+        ? AppColors.safe
+        : online == false
+        ? AppColors.danger
+        : AppColors.warning;
+    final value = widget.hasError
+        ? 'Unavailable'
+        : online == true
+        ? 'Online'
+        : online == false
+        ? 'Offline'
+        : 'Checking';
+    final icon = online == true
+        ? Icons.wifi_rounded
+        : online == false
+        ? Icons.wifi_off_rounded
+        : Icons.sync_rounded;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: online == true ? 0.10 : 0.06),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, child) {
+              final pulse = 1 + (_pulseController.value * 0.07);
+              return Transform.scale(scale: pulse, child: child);
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Icon(icon, key: ValueKey(icon), color: color, size: 21),
+              ),
+            ),
+          ),
+          const Spacer(),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.18),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: Text(
+              value,
+              key: ValueKey(value),
+              maxLines: 1,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'System',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: Text(
+              widget.hasError ? 'Heartbeat unavailable' : widget.lastSeenLabel,
+              key: ValueKey('${widget.hasError}-${widget.lastSeenLabel}'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.roomStatus,
     required this.roomName,
     required this.displayName,
     required this.unreadAlertCount,
+    required this.systemOnline,
+    required this.lastSeenLabel,
     required this.onAlertsTap,
     required this.onProfileTap,
   });
@@ -301,6 +552,8 @@ class _DashboardHeader extends StatelessWidget {
   final String roomName;
   final String displayName;
   final int unreadAlertCount;
+  final bool? systemOnline;
+  final String lastSeenLabel;
   final VoidCallback onAlertsTap;
   final VoidCallback onProfileTap;
 
@@ -312,6 +565,16 @@ class _DashboardHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text(
+                'Aurora Smart Living',
+                style: TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              const SizedBox(height: 3),
               Text(
                 roomName,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -322,24 +585,25 @@ class _DashboardHeader extends StatelessWidget {
 
               const SizedBox(height: 5),
 
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
                 children: [
-                  CircleAvatar(
-                    radius: 5,
-                    backgroundColor: _statusColor(roomStatus),
+                  _HeaderStatus(
+                    color: _statusColor(roomStatus),
+                    label: roomStatus,
                   ),
-
-                  const SizedBox(width: 8),
-
-                  Flexible(
-                    child: Text(
-                      roomStatus,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.lightTextSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  _HeaderStatus(
+                    color: systemOnline == true
+                        ? AppColors.safe
+                        : systemOnline == false
+                        ? AppColors.danger
+                        : AppColors.warning,
+                    label: systemOnline == true
+                        ? 'ESP32 Online • $lastSeenLabel'
+                        : systemOnline == false
+                        ? 'ESP32 Offline • $lastSeenLabel'
+                        : 'Checking ESP32',
                   ),
                 ],
               ),
@@ -451,16 +715,314 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+class _DashboardOverviewGrid extends StatelessWidget {
+  const _DashboardOverviewGrid({
+    required this.automation,
+    required this.schedule,
+    required this.alerts,
+    required this.unreadCount,
+    required this.onAutomationTap,
+    required this.onSchedulesTap,
+    required this.onAlertsTap,
+  });
+
+  final AutomationProvider automation;
+  final DeviceSchedule? schedule;
+  final List<AutomationEvent> alerts;
+  final int unreadCount;
+  final VoidCallback onAutomationTap;
+  final VoidCallback onSchedulesTap;
+  final VoidCallback onAlertsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final criticalCount = alerts
+        .where(
+          (event) =>
+              !event.isRead &&
+              event.displaySeverity == AutomationSeverity.critical,
+        )
+        .length;
+    final cards = [
+      _OverviewCard(
+        icon: Icons.auto_awesome_rounded,
+        accent: automation.masterEnabled ? AppColors.safe : AppColors.offline,
+        eyebrow: 'SMART AUTOMATION',
+        title: automation.masterEnabled ? 'Automation ON' : 'Automation OFF',
+        description:
+            '${automation.enabledRuleCount} rules enabled • ${automation.activeRuleCount} active',
+        action: 'View automation',
+        onTap: onAutomationTap,
+      ),
+      _OverviewCard(
+        icon: Icons.schedule_rounded,
+        accent: AppColors.accentPurple,
+        eyebrow: 'NEXT SCHEDULE',
+        title: schedule?.name ?? 'No upcoming schedule',
+        description: schedule == null
+            ? 'Create a timed device action'
+            : '${schedule!.actionLabel} ${schedule!.deviceName} • '
+                  '${DateFormat.jm().format(schedule!.nextOccurrence()!)} • '
+                  '${_repeatLabel(schedule!.weekdays)}',
+        action: 'View schedules',
+        onTap: onSchedulesTap,
+      ),
+      _OverviewCard(
+        icon: criticalCount > 0
+            ? Icons.warning_amber_rounded
+            : Icons.notifications_rounded,
+        accent: criticalCount > 0 ? AppColors.danger : AppColors.accentBlue,
+        eyebrow: 'ALERT CENTRE',
+        title: '$criticalCount Critical • $unreadCount Unread',
+        description: criticalCount > 0
+            ? 'Immediate attention required'
+            : 'Room alerts and notifications',
+        action: 'View alerts',
+        onTap: onAlertsTap,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 3
+            : constraints.maxWidth >= 560
+            ? 2
+            : 1;
+        return GridView.builder(
+          itemCount: cards.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 13,
+            crossAxisSpacing: 13,
+            childAspectRatio: columns == 1 ? 2.25 : 1.55,
+          ),
+          itemBuilder: (_, index) => cards[index],
+        );
+      },
+    );
+  }
+}
+
+class _OverviewCard extends StatelessWidget {
+  const _OverviewCard({
+    required this.icon,
+    required this.accent,
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+    required this.action,
+    required this.onTap,
+  });
+  final IconData icon;
+  final Color accent;
+  final String eyebrow;
+  final String title;
+  final String description;
+  final String action;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.8),
+      borderRadius: BorderRadius.circular(26),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(26),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      eyebrow,
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.lightTextSecondary,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$action →',
+                style: TextStyle(color: accent, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection({required this.events, required this.onViewAll});
+  final List<AutomationEvent> events;
+  final VoidCallback onViewAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _SectionHeader(
+          title: 'Recent activity',
+          actionText: 'View all activity',
+          onAction: onViewAll,
+        ),
+        const SizedBox(height: 14),
+        if (events.isEmpty)
+          const _ActivityEmptyCard()
+        else
+          ...events.map(
+            (event) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.78),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppColors.primaryLight,
+                    child: const Icon(
+                      Icons.bolt_rounded,
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.displayTitle,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          event.message,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.lightTextSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    DateFormat.jm().format(event.createdAt),
+                    style: const TextStyle(
+                      color: AppColors.lightTextSecondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ActivityEmptyCard extends StatelessWidget {
+  const _ActivityEmptyCard();
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.76),
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: const Text(
+      'No recent activity. Your room is operating normally.',
+      style: TextStyle(color: AppColors.lightTextSecondary),
+    ),
+  );
+}
+
+class _HeaderStatus extends StatelessWidget {
+  const _HeaderStatus({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(radius: 4, backgroundColor: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.lightTextSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TemperatureHero extends StatelessWidget {
   const _TemperatureHero({
     required this.temperature,
     required this.humidity,
     required this.updatedAt,
+    required this.roomStatus,
+    required this.gasDetected,
+    required this.raining,
+    required this.motionDetected,
+    required this.isDark,
   });
 
   final double temperature;
   final double humidity;
   final DateTime updatedAt;
+  final String roomStatus;
+  final bool gasDetected;
+  final bool raining;
+  final bool motionDetected;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
@@ -484,14 +1046,14 @@ class _TemperatureHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.thermostat_rounded, color: Colors.white),
+              const Icon(Icons.home_rounded, color: Colors.white),
 
               SizedBox(width: 8),
 
-              Text(
-                'INDOOR CLIMATE',
+              const Text(
+                'ROOM STATUS',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 11,
@@ -502,11 +1064,30 @@ class _TemperatureHero extends StatelessWidget {
 
               Spacer(),
 
-              Icon(Icons.wifi_rounded, color: Colors.white, size: 19),
+              const Spacer(),
+              Icon(
+                gasDetected
+                    ? Icons.warning_amber_rounded
+                    : Icons.verified_user_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
             ],
           ),
-
-          const SizedBox(height: 25),
+          const SizedBox(height: 14),
+          Text(
+            gasDetected
+                ? 'Attention required — gas detected'
+                : roomStatus == 'Attention needed'
+                ? 'Your room needs attention'
+                : 'Everything looks good',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 20),
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -553,6 +1134,18 @@ class _TemperatureHero extends StatelessWidget {
           ),
 
           const SizedBox(height: 20),
+
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _HeroCondition(label: gasDetected ? 'Gas detected' : 'No gas'),
+              _HeroCondition(label: raining ? 'Rain' : 'No rain'),
+              _HeroCondition(label: motionDetected ? 'Motion' : 'No motion'),
+              _HeroCondition(label: isDark ? 'Dark' : 'Bright'),
+            ],
+          ),
+          const SizedBox(height: 14),
 
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -606,6 +1199,30 @@ class _TemperatureHero extends StatelessWidget {
     }
 
     return Icons.wb_sunny_rounded;
+  }
+}
+
+class _HeroCondition extends StatelessWidget {
+  const _HeroCondition({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 

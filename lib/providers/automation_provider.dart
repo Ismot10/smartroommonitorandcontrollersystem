@@ -487,12 +487,12 @@ class AutomationProvider extends ChangeNotifier {
   AutomationSeverity _severityForRule(AutomationRuleType type) {
     switch (type) {
       case AutomationRuleType.temperatureFan:
-      case AutomationRuleType.lowLight:
       case AutomationRuleType.rainCurtain:
-        return AutomationSeverity.info;
-
-      case AutomationRuleType.motionSecurity:
         return AutomationSeverity.warning;
+
+      case AutomationRuleType.lowLight:
+      case AutomationRuleType.motionSecurity:
+        return AutomationSeverity.info;
 
       case AutomationRuleType.gasEmergency:
         return AutomationSeverity.critical;
@@ -510,7 +510,7 @@ class AutomationProvider extends ChangeNotifier {
     final event = AutomationEvent(
       id: now.microsecondsSinceEpoch.toString(),
       ruleId: rule.id,
-      title: rule.title,
+      title: _friendlyEventTitle(rule.type),
       message: message,
       createdAt: now,
       severity: severity,
@@ -518,6 +518,16 @@ class AutomationProvider extends ChangeNotifier {
     );
 
     unawaited(_alertProvider?.add(event));
+  }
+
+  String _friendlyEventTitle(AutomationRuleType type) {
+    return switch (type) {
+      AutomationRuleType.temperatureFan => 'High Temperature Detected',
+      AutomationRuleType.lowLight => 'Low-Light Automation Activated',
+      AutomationRuleType.motionSecurity => 'Motion Detected',
+      AutomationRuleType.rainCurtain => 'Rain Detected — Curtain Closed',
+      AutomationRuleType.gasEmergency => 'Gas Emergency Detected',
+    };
   }
 
   Future<void> _persistSettings() async {

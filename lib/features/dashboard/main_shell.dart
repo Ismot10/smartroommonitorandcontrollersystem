@@ -31,6 +31,9 @@ class _MainShellState extends State<MainShell> {
         onAlertsTap: () {
           setState(() => _selectedIndex = 3);
         },
+        onAutomationTap: () {
+          setState(() => _selectedIndex = 2);
+        },
         onProfileTap: () {
           setState(() => _selectedIndex = 4);
         },

@@ -25,20 +25,21 @@ class HistoryScreen extends StatelessWidget {
     final devices = context.watch<DeviceProvider>();
 
     final records = history.filteredRecords;
+    final rangeEvents =
+        automation.events
+            .where((event) => !event.createdAt.isBefore(history.rangeStart))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     final activeDeviceCount = devices.devices
         .where((device) => device.isOn)
         .length;
 
-    final physicalDeviceCount = devices.devices
-        .where((device) => device.isPhysical)
-        .length;
-
-    final criticalAlerts = automation.events
+    final criticalAlerts = rangeEvents
         .where((event) => event.severity == AutomationSeverity.critical)
         .length;
 
-    final warningAlerts = automation.events
+    final warningAlerts = rangeEvents
         .where((event) => event.severity == AutomationSeverity.warning)
         .length;
 
@@ -81,7 +82,7 @@ class HistoryScreen extends StatelessWidget {
 
                     _AnalyticsHero(
                       recordCount: records.length,
-                      alertCount: automation.events.length,
+                      alertCount: rangeEvents.length,
                       activeDeviceCount: activeDeviceCount,
                       motionCount: history.motionEventCount,
                     ),
@@ -135,18 +136,20 @@ class HistoryScreen extends StatelessWidget {
                       childAspectRatio: 1.08,
                       children: [
                         _ActivityCard(
-                          icon: Icons.devices_other_rounded,
-                          accent: AppColors.primaryDark,
-                          value: '$activeDeviceCount',
-                          title: 'Active devices',
-                          subtitle: '$physicalDeviceCount physical',
+                          icon: Icons.thermostat_rounded,
+                          accent: AppColors.temperature,
+                          value:
+                              '${history.averageTemperature.toStringAsFixed(1)}°',
+                          title: 'Avg temperature',
+                          subtitle: _rangeLabel(history.selectedRange),
                         ),
                         _ActivityCard(
-                          icon: Icons.warning_amber_rounded,
-                          accent: AppColors.danger,
-                          value: '$criticalAlerts',
-                          title: 'Critical alerts',
-                          subtitle: '$warningAlerts warnings',
+                          icon: Icons.water_drop_rounded,
+                          accent: AppColors.humidity,
+                          value:
+                              '${history.averageHumidity.toStringAsFixed(1)}%',
+                          title: 'Avg humidity',
+                          subtitle: _rangeLabel(history.selectedRange),
                         ),
                         _ActivityCard(
                           icon: Icons.directions_walk_rounded,
@@ -162,6 +165,20 @@ class HistoryScreen extends StatelessWidget {
                           title: 'Rain records',
                           subtitle: _rangeLabel(history.selectedRange),
                         ),
+                        _ActivityCard(
+                          icon: Icons.cloud_rounded,
+                          accent: AppColors.danger,
+                          value: '${history.gasAlertCount}',
+                          title: 'Gas alerts',
+                          subtitle: '$criticalAlerts critical alerts',
+                        ),
+                        _ActivityCard(
+                          icon: Icons.auto_awesome_rounded,
+                          accent: AppColors.accentPurple,
+                          value: '${rangeEvents.length}',
+                          title: 'Automation actions',
+                          subtitle: '$warningAlerts warnings',
+                        ),
                       ],
                     ),
 
@@ -176,7 +193,7 @@ class HistoryScreen extends StatelessWidget {
                                 'Recent decisions and actions taken by Aurora.',
                           ),
                         ),
-                        if (automation.events.isNotEmpty)
+                        if (rangeEvents.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -189,7 +206,7 @@ class HistoryScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
-                              '${automation.events.length}',
+                              '${rangeEvents.length}',
                               style: const TextStyle(
                                 color: AppColors.primaryDark,
                                 fontWeight: FontWeight.w800,
@@ -201,10 +218,10 @@ class HistoryScreen extends StatelessWidget {
 
                     const SizedBox(height: 15),
 
-                    if (automation.events.isEmpty)
+                    if (rangeEvents.isEmpty)
                       const _EmptyTimeline()
                     else
-                      ...automation.events
+                      ...rangeEvents
                           .take(6)
                           .map(
                             (event) => Padding(
@@ -224,9 +241,9 @@ class HistoryScreen extends StatelessWidget {
 
   static String _rangeLabel(HistoryRange range) {
     return switch (range) {
-      HistoryRange.hour => 'During the last hour',
-      HistoryRange.day => 'During the last day',
-      HistoryRange.week => 'During the last week',
+      HistoryRange.today => 'Today',
+      HistoryRange.sevenDays => 'Last 7 days',
+      HistoryRange.thirtyDays => 'Last 30 days',
     };
   }
 }
@@ -472,9 +489,9 @@ class _RangeSelector extends StatelessWidget {
                 ),
                 child: Text(
                   switch (range) {
-                    HistoryRange.hour => '1 hour',
-                    HistoryRange.day => '24 hours',
-                    HistoryRange.week => '7 days',
+                    HistoryRange.today => 'Today',
+                    HistoryRange.sevenDays => '7 days',
+                    HistoryRange.thirtyDays => '30 days',
                   },
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -718,9 +735,9 @@ class _SensorChartCard extends StatelessWidget {
               final time = records[index].createdAt;
 
               final label = switch (history.selectedRange) {
-                HistoryRange.hour => DateFormat('h:mm').format(time),
-                HistoryRange.day => DateFormat('h a').format(time),
-                HistoryRange.week => DateFormat('E').format(time),
+                HistoryRange.today => DateFormat('h a').format(time),
+                HistoryRange.sevenDays => DateFormat('E').format(time),
+                HistoryRange.thirtyDays => DateFormat('MMM d').format(time),
               };
 
               return Padding(

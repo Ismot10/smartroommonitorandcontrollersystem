@@ -14,14 +14,18 @@ class FirebaseHistoryRepository implements HistoryRepository {
 
   @override
   Future<List<HistoryRecord>> getRecords() async {
-    final snapshot = await _reference.limitToLast(1000).get();
+    final snapshot = await _reference
+        .orderByChild('createdAt')
+        .limitToLast(10000)
+        .get();
     return _recordsFromValue(snapshot.value);
   }
 
   @override
   Stream<List<HistoryRecord>> watchRecords() {
     return _reference
-        .limitToLast(1000)
+        .orderByChild('createdAt')
+        .limitToLast(10000)
         .onValue
         .map((event) => _recordsFromValue(event.snapshot.value));
   }
